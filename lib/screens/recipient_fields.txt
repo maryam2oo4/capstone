@@ -1,0 +1,196 @@
+                                const SizedBox(height: 12),
+                                // Recipient Full Name
+                                TextFormField(
+                                  controller: _recipientNameController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Recipient Full Name',
+                                    labelStyle: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                const SizedBox(height: 10),
+                                // Age
+                                TextFormField(
+                                  controller: _recipientAgeController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText: 'Age',
+                                    labelStyle: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                const SizedBox(height: 10),
+                                // Contact Type
+                                DropdownButtonFormField<String>(
+                                  value: _recipientContactType,
+                                  decoration: InputDecoration(
+                                    labelText: 'Contact Type',
+                                    labelStyle: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.black87,
+                                  ),
+                                  items: const [
+                                    'Phone Number',
+                                    'Email',
+                                  ]
+                                      .map(
+                                        (type) => DropdownMenuItem(
+                                          value: type,
+                                          child: Text(type),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _recipientContactType = value;
+                                    });
+                                  },
+                                ),
+                                const SizedBox(height: 10),
+                                // Phone Number
+                                TextFormField(
+                                  controller: _recipientPhoneController,
+                                  keyboardType: TextInputType.phone,
+                                  decoration: InputDecoration(
+                                    labelText: 'Phone Number',
+                                    labelStyle: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                const SizedBox(height: 10),
+                                // Recipient Blood Type
+                                DropdownButtonFormField<String>(
+                                  value: _recipientBloodType,
+                                  decoration: InputDecoration(
+                                    labelText: 'Recipient Blood Type',
+                                    labelStyle: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.black87,
+                                  ),
+                                  items: const [
+                                    'O+',
+                                    'O-',
+                                    'A+',
+                                    'A-',
+                                    'B+',
+                                    'B-',
+                                    'AB+',
+                                    'AB-',
+                                  ]
+                                      .map(
+                                        (type) => DropdownMenuItem(
+                                          value: type,
+                                          child: Text(type),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _recipientBloodType = value;
+                                    });
+                                  },
+                                  hint: const Text(
+                                    'Select Blood Type',
+                                    style: TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                // Hospital
+                                DropdownButtonFormField<String>(
+                                  value: _recipientHospital,
+                                  decoration: InputDecoration(
+                                    labelText: 'Hospital',
+                                    labelStyle: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.black87,
+                                  ),
+                                  items: const [
+                                    'City Hospital',
+                                    'General Hospital',
+                                    'Medical Center',
+                                    'University Hospital',
+                                    'Regional Hospital',
+                                  ]
+                                      .map(
+                                        (hospital) => DropdownMenuItem(
+                                          value: hospital,
+                                          child: Text(hospital),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _recipientHospital = value;
+                                    });
+                                  },
+                                  hint: const Text(
+                                    'Select Hospital',
+                                    style: TextStyle(fontSize: 13),
+                                  ),
+                                ),

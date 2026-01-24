@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'donation.dart';
 import 'app_drawer.dart';
-import 'donation_center.dart';
 
 class HomePage extends StatefulWidget {
   final bool isAdmin;
@@ -11,17 +11,17 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePage extends State<HomePage> {
+  bool _showMoreHeroes = false;
+  bool _donationButtonActive = false;
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const AppDrawer(),
+      drawer: AppDrawer(),
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: Image.asset("assets/images/logol.png", height: 40),
         centerTitle: true,
-        elevation: 12,
-        shadowColor: Colors.black38,
-        backgroundColor: const Color(0xFFF5F5F5),
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         child: Stack(
@@ -31,13 +31,13 @@ class _HomePage extends State<HomePage> {
               "assets/images/image.png",
               fit: BoxFit.cover,
               width: double.infinity,
-              height: MediaQuery.of(context).size.height,
+              height: MediaQuery.of(context).size.height, // full screen height
             ),
 
             // Second centered image and text/buttons
             Column(
               children: [
-                const SizedBox(height: 100),
+                const SizedBox(height: 100), // spacing from top / appbar
                 Center(
                   child: Image.asset("assets/images/home.png", width: 350),
                 ),
@@ -47,19 +47,19 @@ class _HomePage extends State<HomePage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
+                      Text(
                         "BE THE\nLINK THAT\nSAVES A LIFE",
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 32,
                           fontWeight: FontWeight.w900,
-                          color: Color.fromARGB(255, 42, 59, 68),
+                          color: const Color.fromARGB(255, 42, 59, 68),
                           height: 1.2,
                         ),
                       ),
                       const SizedBox(height: 15),
-                      const SizedBox(
+                      SizedBox(
                         width: 280,
                         child: Text(
                           "Join LifeLink in connecting donors, hospitals and patients to save lives through blood, organ and financial donations.",
@@ -76,46 +76,30 @@ class _HomePage extends State<HomePage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const DonationCenterPage(),
-                                ),
-                              );
-                            },
+                            onPressed: () {},
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
-                              side: const BorderSide(
-                                color: Color.fromARGB(255, 204, 14, 1),
+                              side: BorderSide(
+                                color: const Color.fromARGB(255, 204, 14, 1),
                                 width: 2,
                               ),
-                              shape: const StadiumBorder(),
-                              padding: const EdgeInsets.symmetric(
+                              shape: StadiumBorder(),
+                              padding: EdgeInsets.symmetric(
                                 horizontal: 22,
                                 vertical: 12,
                               ),
                             ),
-                            child: const Text(
+                            child: Text(
                               "Save Life",
                               style: TextStyle(
-                                color: Color.fromARGB(255, 196, 19, 7),
+                                color: const Color.fromARGB(255, 196, 19, 7),
                                 fontSize: 16,
                               ),
                             ),
                           ),
                           const SizedBox(width: 15),
                           ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const DonationCenterPage(),
-                                ),
-                              );
-                            },
+                            onPressed: () {},
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color.fromARGB(
                                 255,
@@ -123,13 +107,13 @@ class _HomePage extends State<HomePage> {
                                 19,
                                 7,
                               ),
-                              shape: const StadiumBorder(),
-                              padding: const EdgeInsets.symmetric(
+                              shape: StadiumBorder(),
+                              padding: EdgeInsets.symmetric(
                                 horizontal: 22,
                                 vertical: 12,
                               ),
                             ),
-                            child: const Text(
+                            child: Text(
                               "Donate Blood",
                               style: TextStyle(
                                 color: Colors.white,
