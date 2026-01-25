@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import './home.dart'; // Import your HomePage
 import '../core/network/auth_service.dart';
 import './register.dart';
+// import './home.dart'; // Not needed when using named routes to main
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -61,6 +62,20 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _loading = false);
       }
     }
+  void login() {
+    final String email = emailController.text.trim();
+    final String password = passwordController.text.trim();
+
+    // TODO: validate credentials (currently bypassed)
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter email and password.')),
+      );
+      return;
+    }
+
+    // Navigate to main app with bottom navigation
+    Navigator.pushReplacementNamed(context, '/main');
   }
 
   @override
@@ -81,10 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 gradient: LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
-                  colors: [
-                    Color(0xFF330000),
-                    Color(0xFFB71C1C),
-                  ],
+                  colors: [Color(0xFF330000), Color(0xFFB71C1C)],
                 ),
               ),
               alignment: Alignment.center,
@@ -201,10 +213,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         gradient: const LinearGradient(
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
-                          colors: [
-                            Color(0xFF330000),
-                            Color(0xFFB71C1C),
-                          ],
+                          colors: [Color(0xFF330000), Color(0xFFB71C1C)],
                         ),
                       ),
                       child: ElevatedButton(
@@ -262,4 +271,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-

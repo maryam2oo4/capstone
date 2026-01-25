@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/state/app_state.dart';
 import '/screens/home.dart';
+import '/screens/login.dart';
 import '/screens/lets_play.dart';
 import '/screens/donation_center.dart';
 import '/screens/contact_us.dart';
@@ -42,6 +43,11 @@ class MainApp extends StatelessWidget {
       ),
       home: const LoginScreen(),
       routes: {'/register': (context) => const RegisterPage()},
+      routes: {
+        '/login': (_) => const LoginScreen(),
+        '/main': (_) => const MainNavigation(),
+      },
+      home: const LoginScreen(),
     );
   }
 }
