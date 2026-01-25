@@ -48,9 +48,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => HomePage(isAdmin: isAdmin),
-        ),
+        MaterialPageRoute(builder: (_) => HomePage(isAdmin: isAdmin)),
       );
     } catch (e) {
       final msg = e.toString().contains('Invalid credentials')
@@ -62,20 +60,22 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _loading = false);
       }
     }
-  void login() {
-    final String email = emailController.text.trim();
-    final String password = passwordController.text.trim();
 
-    // TODO: validate credentials (currently bypassed)
-    if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter email and password.')),
-      );
-      return;
+    void login() {
+      final String email = emailController.text.trim();
+      final String password = passwordController.text.trim();
+
+      // TODO: validate credentials (currently bypassed)
+      if (email.isEmpty || password.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter email and password.')),
+        );
+        return;
+      }
+
+      // Navigate to main app with bottom navigation
+      Navigator.pushReplacementNamed(context, '/main');
     }
-
-    // Navigate to main app with bottom navigation
-    Navigator.pushReplacementNamed(context, '/main');
   }
 
   @override

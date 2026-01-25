@@ -41,8 +41,6 @@ class MainApp extends StatelessWidget {
           iconTheme: IconThemeData(color: Colors.black),
         ),
       ),
-      home: const LoginScreen(),
-      routes: {'/register': (context) => const RegisterPage()},
       routes: {
         '/login': (_) => const LoginScreen(),
         '/main': (_) => const MainNavigation(),
