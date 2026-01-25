@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../homedonation/searchbar.dart';
 import '../homedonation/calendar.dart';
-import '../mockdata/mockhomerequest.dart';
+import '../core/network/api_client.dart';
 
 class BloodDonationHospitalPage extends StatefulWidget {
   const BloodDonationHospitalPage({super.key});
@@ -13,6 +13,10 @@ class BloodDonationHospitalPage extends StatefulWidget {
 
 class _BloodDonationHospitalPageState extends State<BloodDonationHospitalPage> {
   String searchQuery = "";
+  bool loading = true;
+  String error = '';
+  List<Map<String, dynamic>> urgentHospitals = [];
+  List<Map<String, dynamic>> regularHospitals = [];
 
   void handleSearch(String query) {
     setState(() {
@@ -20,30 +24,54 @@ class _BloodDonationHospitalPageState extends State<BloodDonationHospitalPage> {
     });
   }
 
-  List<Map<String, dynamic>> _filterRequests(
-    List<Map<String, dynamic>> requests,
-  ) {
-    if (searchQuery.isEmpty) return requests;
+  @override
+  void initState() {
+    super.initState();
+    _fetchHospitals();
+  }
 
-    return requests.where((request) {
-      final hospitalName =
-          request["hospital_name"]?.toString().toLowerCase() ?? '';
-      final bloodType = request["blood_type"]?.toString().toLowerCase() ?? '';
-      final address = request["address"]?.toString().toLowerCase() ?? '';
-      final code = request["code"]?.toString().toLowerCase() ?? '';
-      final query = searchQuery.toLowerCase();
+  Future<void> _fetchHospitals() async {
+    setState(() {
+      loading = true;
+      error = '';
+    });
+    try {
+      final dio = await ApiClient.instance.dio();
+      final res = await dio.get('/api/blood/hospital_donation');
 
-      return hospitalName.contains(query) ||
-          bloodType.contains(query) ||
-          address.contains(query) ||
-          code.contains(query);
+      final urg = (res.data['urgent_hospitals'] as List?) ?? [];
+      final reg = (res.data['regular_hospitals'] as List?) ?? [];
+
+      setState(() {
+        urgentHospitals = urg.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        regularHospitals = reg.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      });
+    } catch (e) {
+      setState(() {
+        error = 'Failed to load hospitals. Make sure the backend is reachable.';
+      });
+    } finally {
+      setState(() => loading = false);
+    }
+  }
+
+  List<Map<String, dynamic>> _filterHospitals(List<Map<String, dynamic>> hospitals) {
+    if (searchQuery.isEmpty) return hospitals;
+
+    final query = searchQuery.toLowerCase();
+    return hospitals.where((h) {
+      final name = h["name"]?.toString().toLowerCase() ?? '';
+      final address = h["address"]?.toString().toLowerCase() ?? '';
+      final code = h["code"]?.toString().toLowerCase() ?? '';
+      final bloodType = h["blood_type_needed"]?.toString().toLowerCase() ?? '';
+      return name.contains(query) || address.contains(query) || code.contains(query) || bloodType.contains(query);
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredUrgent = _filterRequests(urgentHomeAppointments);
-    final filteredRegular = _filterRequests(regularHomeAppointments);
+    final filteredUrgent = _filterHospitals(urgentHospitals);
+    final filteredRegular = _filterHospitals(regularHospitals);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -53,6 +81,9 @@ class _BloodDonationHospitalPageState extends State<BloodDonationHospitalPage> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(onPressed: _fetchHospitals, icon: const Icon(Icons.refresh)),
+        ],
       ),
       body: Column(
         children: [
@@ -64,16 +95,30 @@ class _BloodDonationHospitalPageState extends State<BloodDonationHospitalPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (loading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(color: Colors.red),
+                      ),
+                    ),
+                  if (!loading && error.isNotEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(error, style: const TextStyle(color: Colors.red)),
+                      ),
+                    ),
                   // Urgent Section
-                  if (filteredUrgent.isNotEmpty) ...[
+                  if (!loading && error.isEmpty && filteredUrgent.isNotEmpty) ...[
                     ...filteredUrgent.map(
-                      (request) => _buildRequestCard(request, isUrgent: true),
+                      (hospital) => _buildRequestCard(hospital, isUrgent: true),
                     ),
                     const SizedBox(height: 24),
                   ],
 
                   // Regular Section
-                  if (filteredRegular.isNotEmpty) ...[
+                  if (!loading && error.isEmpty && filteredRegular.isNotEmpty) ...[
                     Row(
                       children: const [
                         Icon(
@@ -94,19 +139,19 @@ class _BloodDonationHospitalPageState extends State<BloodDonationHospitalPage> {
                     ),
                     const SizedBox(height: 12),
                     ...filteredRegular.map(
-                      (request) => _buildRequestCard(request, isUrgent: false),
+                      (hospital) => _buildRequestCard(hospital, isUrgent: false),
                     ),
                   ],
 
                   // No results
-                  if (filteredUrgent.isEmpty && filteredRegular.isEmpty)
+                  if (!loading && error.isEmpty && filteredUrgent.isEmpty && filteredRegular.isEmpty)
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.all(32),
                         child: Text(
                           searchQuery.isEmpty
-                              ? "No requests available"
-                              : "No requests match your search",
+                              ? "No hospitals available"
+                              : "No hospitals match your search",
                           style: const TextStyle(color: Colors.grey),
                         ),
                       ),
@@ -121,9 +166,17 @@ class _BloodDonationHospitalPageState extends State<BloodDonationHospitalPage> {
   }
 
   Widget _buildRequestCard(
-    Map<String, dynamic> request, {
+    Map<String, dynamic> hospital, {
     required bool isUrgent,
   }) {
+    final hospitalName = hospital["name"] ?? "Unknown Hospital";
+    final code = hospital["code"] ?? "N/A";
+    final address = hospital["address"] ?? "N/A";
+    final bloodTypeNeeded = hospital["blood_type_needed"];
+    final availableSlots = hospital["available_slots"] ?? hospital["urgent_slots"] ?? hospital["regular_slots"];
+    final urgentDueDate = hospital["urgent_due_date"] ?? hospital["due_date"];
+    final urgentDueTime = hospital["urgent_due_time"] ?? hospital["due_time"];
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
@@ -141,7 +194,13 @@ class _BloodDonationHospitalPageState extends State<BloodDonationHospitalPage> {
             context,
             MaterialPageRoute(
               builder: (context) => CalendarPage(
-                selectedRequest: request,
+                selectedRequest: {
+                  'id': hospital['id'],
+                  'name': hospitalName,
+                  'address': address,
+                  'blood_type_needed': bloodTypeNeeded,
+                  'appointment_type': isUrgent ? 'urgent' : 'regular',
+                },
                 donationType: 'hospital',
               ),
             ),
@@ -161,7 +220,7 @@ class _BloodDonationHospitalPageState extends State<BloodDonationHospitalPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          request["hospital_name"] ?? "Unknown Hospital",
+                          hospitalName,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -169,7 +228,7 @@ class _BloodDonationHospitalPageState extends State<BloodDonationHospitalPage> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          request["code"] ?? "N/A",
+                          code,
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade600,
@@ -201,21 +260,28 @@ class _BloodDonationHospitalPageState extends State<BloodDonationHospitalPage> {
               ),
               const SizedBox(height: 12),
 
-              if (request["blood_type"] != null)
+              if (bloodTypeNeeded != null)
                 _buildInfoRow(
                   Icons.bloodtype,
-                  "Blood Type",
-                  request["blood_type"],
+                  "Blood Type Needed",
+                  bloodTypeNeeded.toString(),
                 ),
 
-              _buildInfoRow(
-                Icons.calendar_today,
-                "Date",
-                request["appointment_date"],
-              ),
+              if (availableSlots != null)
+                _buildInfoRow(
+                  Icons.event_available,
+                  "Available Slots",
+                  availableSlots.toString(),
+                ),
 
-              if (request["address"] != null)
-                _buildInfoRow(Icons.location_on, "Address", request["address"]),
+              if (isUrgent && urgentDueDate != null)
+                _buildInfoRow(
+                  Icons.alarm,
+                  "Due",
+                  urgentDueTime != null ? "$urgentDueDate at $urgentDueTime" : "$urgentDueDate",
+                ),
+
+              _buildInfoRow(Icons.location_on, "Address", address),
             ],
           ),
         ),

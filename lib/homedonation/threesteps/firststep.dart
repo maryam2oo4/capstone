@@ -6,6 +6,7 @@ class FirstStepForm extends StatefulWidget {
   final Map<String, dynamic> selectedRequest;
   final String selectedDate;
   final String selectedTime;
+  final String donationType; // 'home' or 'hospital'
   final Function(Map<String, dynamic>) onContinue;
 
   const FirstStepForm({
@@ -13,6 +14,7 @@ class FirstStepForm extends StatefulWidget {
     required this.selectedRequest,
     required this.selectedDate,
     required this.selectedTime,
+    required this.donationType,
     required this.onContinue,
   });
 
@@ -22,6 +24,10 @@ class FirstStepForm extends StatefulWidget {
 
 class _FirstStepFormState extends State<FirstStepForm> {
   final _formKey = GlobalKey<FormState>();
+
+  /// True only for home donation; hide address & location for hospital.
+  bool get _isHomeDonation =>
+      widget.donationType.trim().toLowerCase() == 'home';
 
   late TextEditingController firstNameController;
   late TextEditingController lastNameController;
@@ -41,6 +47,11 @@ class _FirstStepFormState extends State<FirstStepForm> {
   @override
   void initState() {
     super.initState();
+    assert(
+      widget.donationType.trim().toLowerCase() == 'home' ||
+          widget.donationType.trim().toLowerCase() == 'hospital',
+      'donationType must be "home" or "hospital", got: "${widget.donationType}"',
+    );
     firstNameController = TextEditingController();
     lastNameController = TextEditingController();
     emailController = TextEditingController();
@@ -181,7 +192,7 @@ class _FirstStepFormState extends State<FirstStepForm> {
       return;
     }
 
-    final formData = {
+    final formData = <String, dynamic>{
       'first_name': firstNameController.text,
       'last_name': lastNameController.text,
       'email': emailController.text,
@@ -189,13 +200,15 @@ class _FirstStepFormState extends State<FirstStepForm> {
       'date_of_birth': dateOfBirthController.text,
       'gender': selectedGender,
       'weight': weightController.text,
-      'address': addressController.text,
-      'latitude': latitude,
-      'longitude': longitude,
-      'emerg_contact': emergContactController.text,
-      'emerg_phone': emergPhoneController.text,
       'selected_date': widget.selectedDate,
       'selected_time': widget.selectedTime,
+      'emerg_contact': emergContactController.text,
+      'emerg_phone': emergPhoneController.text,
+      if (_isHomeDonation) ...{
+        'address': addressController.text,
+        'latitude': latitude,
+        'longitude': longitude,
+      },
     };
 
     widget.onContinue(formData);
@@ -323,16 +336,18 @@ class _FirstStepFormState extends State<FirstStepForm> {
           ),
           const SizedBox(height: 16),
 
-          // Address
-          _buildTextField(
-            controller: addressController,
-            label: "Address",
-            hint: "Enter your address in details..",
-            icon: Icons.location_on,
-            maxLines: 3,
-            isRequired: true,
-          ),
-          const SizedBox(height: 16),
+          // Address (home donation only)
+          if (_isHomeDonation) ...[
+            _buildTextField(
+              controller: addressController,
+              label: "Address",
+              hint: "Enter your address in details..",
+              icon: Icons.location_on,
+              maxLines: 3,
+              isRequired: true,
+            ),
+            const SizedBox(height: 16),
+          ],
 
           // Emergency Contacts (Optional)
           _buildTextField(
@@ -354,94 +369,96 @@ class _FirstStepFormState extends State<FirstStepForm> {
           ),
           const SizedBox(height: 16),
 
-          // Location Sharing
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Share Your Location",
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
+          // Location Sharing (home donation only)
+          if (_isHomeDonation) ...[
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Share Your Location",
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          latitude != null
-                              ? Icons.location_on
-                              : Icons.location_off,
-                          color: latitude != null ? Colors.green : Colors.grey,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
                             latitude != null
-                                ? 'Location captured: ${latitude!.toStringAsFixed(6)}, ${longitude!.toStringAsFixed(6)}'
-                                : 'No location shared yet',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade700,
+                                ? Icons.location_on
+                                : Icons.location_off,
+                            color: latitude != null ? Colors.green : Colors.grey,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              latitude != null
+                                  ? 'Location captured: ${latitude!.toStringAsFixed(6)}, ${longitude!.toStringAsFixed(6)}'
+                                  : 'No location shared yet',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade700,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: isLoadingLocation
-                            ? null
-                            : _openLocationPicker,
-                        icon: isLoadingLocation
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.my_location),
-                        label: Text(
-                          isLoadingLocation
-                              ? 'Getting Location...'
-                              : latitude != null
-                              ? 'Update Location on Map'
-                              : 'Select Location on Map',
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          side: const BorderSide(color: Colors.red),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: isLoadingLocation
+                              ? null
+                              : _openLocationPicker,
+                          icon: isLoadingLocation
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.my_location),
+                          label: Text(
+                            isLoadingLocation
+                                ? 'Getting Location...'
+                                : latitude != null
+                                ? 'Update Location on Map'
+                                : 'Select Location on Map',
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: const BorderSide(color: Colors.red),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'This helps our phlebotomist find your address easily',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
+                      const SizedBox(height: 8),
+                      Text(
+                        'This helps our phlebotomist find your address easily',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
+              ],
+            ),
+            const SizedBox(height: 24),
+          ],
 
           // Buttons
           Column(
@@ -623,7 +640,7 @@ class _FirstStepFormState extends State<FirstStepForm> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: selectedGender,
+          initialValue: selectedGender,
           decoration: InputDecoration(
             prefixIcon: Icon(Icons.person, color: Colors.grey.shade600),
             border: OutlineInputBorder(

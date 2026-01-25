@@ -591,12 +591,12 @@ class PatientCard extends StatelessWidget {
             children: [
               ElevatedButton(
                 onPressed: onSupport,
-                child: Text('Support'),
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
+                child: Text('Support'),
               ),
             ],
           ),

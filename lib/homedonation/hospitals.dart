@@ -152,7 +152,7 @@ class Hospitals extends StatelessWidget {
                         ),
                       ),
                     );
-                  }).toList(),
+                  }),
                 ],
               ),
 
@@ -315,7 +315,7 @@ class Hospitals extends StatelessWidget {
                                 ),
                               ),
                             );
-                          }).toList(),
+                          }),
                         ],
                       ),
 
@@ -467,7 +467,7 @@ class Hospitals extends StatelessWidget {
                             ),
                           );
                         })
-                        .toList(),
+                        ,
                   ],
                 )
               else

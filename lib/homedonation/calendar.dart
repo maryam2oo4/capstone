@@ -1,26 +1,22 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'threesteps/threesteps_page.dart';
 import '../core/state/app_state.dart';
+import '../core/network/api_client.dart';
 
 class TimeSlot {
   final String id;
   final String time;
   final String status; // 'available' or 'booked'
+  final String? timeKey; // For backend booking reference
 
-  TimeSlot({required this.id, required this.time, required this.status});
+  TimeSlot({
+    required this.id,
+    required this.time,
+    required this.status,
+    this.timeKey,
+  });
 }
-
-// Mock time slots data - all start as available
-final List<TimeSlot> mockTimeSlots = [
-  TimeSlot(id: '1', time: '08:00 - 09:00', status: 'available'),
-  TimeSlot(id: '2', time: '09:00 - 10:00', status: 'available'),
-  TimeSlot(id: '3', time: '10:00 - 11:00', status: 'available'),
-  TimeSlot(id: '4', time: '11:00 - 12:00', status: 'available'),
-  TimeSlot(id: '5', time: '14:00 - 15:00', status: 'available'),
-  TimeSlot(id: '6', time: '15:00 - 16:00', status: 'available'),
-];
 
 class CalendarPage extends StatefulWidget {
   final Map<String, dynamic> selectedRequest;
@@ -39,41 +35,227 @@ class CalendarPage extends StatefulWidget {
 class _CalendarPageState extends State<CalendarPage> {
   late DateTime _selectedDate;
   String? _selectedTimeSlotId;
+  List<TimeSlot> _timeSlots = [];
+  bool _loadingSlots = false;
+  String? _slotsError;
+  Set<String> _availableDates = {}; // Dates that have available slots (YYYY-MM-DD format)
+  bool _loadingAvailableDates = true; // Track loading state
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = DateTime(2026, 1, 21); // Set to Jan 21, 2026 like mockup
+    _selectedDate = DateTime.now();
+    _initializeCalendar(); // Load available dates first, then slots
   }
 
-  // Check if a specific date+time combination is booked
-  bool _isTimeSlotBooked(DateTime date, String time) {
-    final appState = Provider.of<AppState>(context, listen: false);
-    final dateString =
-        '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  Future<void> _initializeCalendar() async {
+    // First load all available dates
+    await _loadAvailableDates();
+    // Then load slots for today
+    _fetchTimeSlots();
+  }
 
-    final isBooked = appState.donationAppointments.any((appointment) {
-      final matches =
-          appointment['appointment_date'] == dateString &&
-          appointment['appointment_time'] == time &&
-          appointment['donation_type'] == widget.donationType;
-      if (matches) {
-        debugPrint('✓ Found booked slot: $dateString at $time');
-      }
-      return matches;
+  Future<void> _fetchTimeSlots() async {
+    final hospitalIdRaw = widget.selectedRequest['id'];
+    if (hospitalIdRaw == null) {
+      debugPrint('❌ Hospital ID is missing in selectedRequest: ${widget.selectedRequest}');
+      setState(() {
+        _slotsError = 'Hospital ID is missing';
+        _loadingSlots = false;
+      });
+      return;
+    }
+
+    // Convert hospital ID to string (handles both int and string)
+    final hospitalId = hospitalIdRaw.toString();
+
+    setState(() {
+      _loadingSlots = true;
+      _slotsError = null;
     });
 
-    return isBooked;
+    try {
+      final dio = await ApiClient.instance.dio();
+      final endpoint = widget.donationType == 'home'
+          ? '/api/blood/home_donation/$hospitalId'
+          : '/api/blood/hospital_donation/$hospitalId';
+      
+      final appointmentType = widget.selectedRequest['appointment_type'];
+      final url = appointmentType != null
+          ? '$endpoint?appointment_type=$appointmentType'
+          : endpoint;
+
+      final selectedDateStr = _formatDateForBackend(_selectedDate);
+      debugPrint('📅 Fetching time slots');
+      debugPrint('   Hospital ID: $hospitalId');
+      debugPrint('   Selected Date: $selectedDateStr');
+      debugPrint('   Donation Type: ${widget.donationType}');
+      debugPrint('   Appointment Type: $appointmentType');
+      debugPrint('   URL: $url');
+
+      final res = await dio.get(url);
+      debugPrint('✅ Response received: ${res.statusCode}');
+      debugPrint('   Response keys: ${res.data.keys}');
+      
+      final timeSlotsData = (res.data['time_slots'] as List?) ?? [];
+      debugPrint('📊 Received ${timeSlotsData.length} total time slots from backend');
+
+      if (timeSlotsData.isEmpty) {
+        debugPrint('⚠️ No time slots in response. Full response: ${res.data}');
+      }
+
+      // Filter slots for the selected date
+      debugPrint('🔍 Filtering for date: $selectedDateStr');
+      debugPrint('   Total slots received: ${timeSlotsData.length}');
+      
+      final filteredSlots = <TimeSlot>[];
+      for (var slot in timeSlotsData) {
+        final rawSlotDate = slot['date']?.toString() ?? '';
+        final slotDate = _normalizeDate(rawSlotDate);
+        final slotStatus = slot['status']?.toString() ?? 'available';
+        final slotTime = slot['time']?.toString() ?? '';
+        
+        debugPrint('   Slot: rawDate="$rawSlotDate" -> normalized="$slotDate", time="$slotTime", status="$slotStatus"');
+        debugPrint('   Comparing: "$slotDate" == "$selectedDateStr" ? ${slotDate == selectedDateStr}');
+        
+        if (slotDate == selectedDateStr) {
+          debugPrint('   ✅ Match found! Adding slot: $slotTime ($slotStatus)');
+          filteredSlots.add(TimeSlot(
+            id: slot['id']?.toString() ?? '',
+            time: slotTime,
+            status: slotStatus,
+            timeKey: slot['time_key']?.toString(),
+          ));
+        } else {
+          debugPrint('   ❌ Date mismatch: "$slotDate" != "$selectedDateStr"');
+        }
+      }
+
+      debugPrint('✅ Filtered to ${filteredSlots.length} slots for selected date');
+
+      setState(() {
+        _timeSlots = filteredSlots;
+        _selectedTimeSlotId = null; // Reset selection when date changes
+      });
+    } catch (e) {
+      debugPrint('❌ Error fetching time slots: $e');
+      if (e.toString().contains('DioException')) {
+        try {
+          final response = (e as dynamic).response;
+          debugPrint('   Response status: ${response?.statusCode}');
+          debugPrint('   Response data: ${response?.data}');
+          if (response?.statusCode == 404) {
+            setState(() {
+              _slotsError = 'Hospital not found or no appointments available';
+            });
+            return;
+          }
+        } catch (_) {}
+      }
+      setState(() {
+        _slotsError = 'Failed to load time slots. Please try again.';
+        _timeSlots = [];
+      });
+    } finally {
+      setState(() {
+        _loadingSlots = false;
+      });
+    }
   }
 
-  // Check if a date has any available time slots
-  bool _hasAvailableSlots(DateTime date) {
-    for (var slot in mockTimeSlots) {
-      if (!_isTimeSlotBooked(date, slot.time)) {
-        return true; // At least one slot is available
-      }
+  String _formatDateForBackend(DateTime date) {
+    final formatted = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    debugPrint('📅 Formatted date: ${date.day}/${date.month}/${date.year} -> $formatted');
+    return formatted;
+  }
+  
+  // Normalize date string to YYYY-MM-DD format (same as website)
+  String _normalizeDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return '';
+    // Remove time portion if present (handle both 'T' and ' ' separators)
+    String normalized = dateStr.split('T')[0].split(' ')[0].trim();
+    // Ensure it's exactly YYYY-MM-DD format (10 characters)
+    if (normalized.length >= 10) {
+      normalized = normalized.substring(0, 10);
     }
-    return false; // All slots are booked
+    return normalized;
+  }
+
+  // Load all available dates for this hospital
+  Future<void> _loadAvailableDates() async {
+    final hospitalIdRaw = widget.selectedRequest['id'];
+    if (hospitalIdRaw == null) {
+      setState(() {
+        _loadingAvailableDates = false;
+      });
+      return;
+    }
+
+    final hospitalId = hospitalIdRaw.toString();
+
+    setState(() {
+      _loadingAvailableDates = true;
+    });
+
+    try {
+      final dio = await ApiClient.instance.dio();
+      final endpoint = widget.donationType == 'home'
+          ? '/api/blood/home_donation/$hospitalId'
+          : '/api/blood/hospital_donation/$hospitalId';
+      
+      final appointmentType = widget.selectedRequest['appointment_type'];
+      final url = appointmentType != null
+          ? '$endpoint?appointment_type=$appointmentType'
+          : endpoint;
+
+      debugPrint('📅 Loading available dates from: $url');
+
+      final res = await dio.get(url);
+      final timeSlotsData = (res.data['time_slots'] as List?) ?? [];
+
+      debugPrint('📊 Received ${timeSlotsData.length} total time slots from backend');
+
+      // Extract all dates that have ANY slots (available or booked)
+      // We enable dates that have slots, but only show available ones when selected
+      final availableDatesSet = <String>{};
+      for (var slot in timeSlotsData) {
+        final rawSlotDate = slot['date']?.toString() ?? '';
+        final slotDate = _normalizeDate(rawSlotDate);
+        
+        if (slotDate.isNotEmpty) {
+          availableDatesSet.add(slotDate);
+          debugPrint('   Added date: $slotDate (from raw: $rawSlotDate)');
+        }
+      }
+
+      debugPrint('✅ Found ${availableDatesSet.length} dates with slots');
+      debugPrint('   Dates with slots: ${availableDatesSet.toList()}');
+
+      setState(() {
+        _availableDates = availableDatesSet;
+        _loadingAvailableDates = false;
+      });
+    } catch (e) {
+      debugPrint('❌ Error loading available dates: $e');
+      setState(() {
+        _availableDates = {}; // Empty set means no dates available
+        _loadingAvailableDates = false;
+      });
+    }
+  }
+
+  // Check if a date has any slots (available or booked)
+  bool _hasAvailableSlots(DateTime date) {
+    if (_loadingAvailableDates) {
+      // While loading, disable all dates
+      return false;
+    }
+    final dateStr = _formatDateForBackend(date);
+    final hasSlots = _availableDates.contains(dateStr);
+    if (!hasSlots && _availableDates.isNotEmpty) {
+      debugPrint('🔍 Date $dateStr NOT found. Available dates: ${_availableDates.toList()}');
+    }
+    return hasSlots;
   }
 
   @override
@@ -100,22 +282,29 @@ class _CalendarPageState extends State<CalendarPage> {
               onPressed: () => Navigator.pop(context),
             ),
           ),
-          body: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Calendar
-                  _buildCalendar(),
-                  const SizedBox(height: 32),
-                  // Time Slots
-                  _buildTimeSlots(),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            ),
-          ),
+          body: _loadingAvailableDates
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(color: Colors.red),
+                  ),
+                )
+              : SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Calendar
+                        _buildCalendar(),
+                        const SizedBox(height: 32),
+                        // Time Slots
+                        _buildTimeSlots(),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+                ),
         );
       },
     );
@@ -195,18 +384,20 @@ class _CalendarPageState extends State<CalendarPage> {
           date.month == _selectedDate.month &&
           date.year == _selectedDate.year;
       final isPast = date.isBefore(DateTime(now.year, now.month, now.day));
-      final isFullyBooked = !_hasAvailableSlots(date);
-      final isDisabled = isPast || isFullyBooked;
+      // Only disable past dates, enable all future dates
+      final isDisabled = isPast || _loadingAvailableDates;
 
       calendarDays.add(
         GestureDetector(
           onTap: isDisabled
               ? null
-              : () {
+              : () async {
+                  debugPrint('📅 Date selected: ${date.day}/${date.month}/${date.year}');
                   setState(() {
                     _selectedDate = date;
                     _selectedTimeSlotId = null;
                   });
+                  await _fetchTimeSlots(); // Fetch slots for the new date
                 },
           child: Container(
             width: 45,
@@ -223,20 +414,33 @@ class _CalendarPageState extends State<CalendarPage> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Center(
-              child: Text(
-                day.toString(),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: isDisabled
-                      ? Colors.grey.shade400
-                      : isSelected
-                      ? Colors.white
-                      : Colors.black87,
-                  decoration: isFullyBooked && !isPast
-                      ? TextDecoration.lineThrough
-                      : null,
-                ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    day.toString(),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: isDisabled
+                          ? Colors.grey.shade400
+                          : isSelected
+                          ? Colors.white
+                          : Colors.black87,
+                    ),
+                  ),
+                  // Small dot indicator for dates with available slots
+                  if (!isPast && _hasAvailableSlots(date) && !isSelected)
+                    Container(
+                      margin: const EdgeInsets.only(top: 2),
+                      width: 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -283,12 +487,16 @@ class _CalendarPageState extends State<CalendarPage> {
     return months[month - 1];
   }
 
+  String _formatDateForDisplay(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
   Widget _buildTimeSlots() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "Available Time Slots",
+          "Time Slots",
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
@@ -296,15 +504,42 @@ class _CalendarPageState extends State<CalendarPage> {
           ),
         ),
         const SizedBox(height: 24),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: mockTimeSlots.length,
-          itemBuilder: (context, index) {
-            final slot = mockTimeSlots[index];
-            final isSelected = _selectedTimeSlotId == slot.id;
-            // Check if this slot is booked for the selected date
-            final isBooked = _isTimeSlotBooked(_selectedDate, slot.time);
+        if (_loadingSlots)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(color: Colors.red),
+            ),
+          )
+        else if (_slotsError != null)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                _slotsError!,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          )
+        else if (_timeSlots.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'No time slots for ${_formatDateForDisplay(_selectedDate)}',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _timeSlots.length,
+            itemBuilder: (context, index) {
+              final slot = _timeSlots[index];
+              final isSelected = _selectedTimeSlotId == slot.id;
+              final isBooked = slot.status == 'booked';
 
             return GestureDetector(
               onTap: isBooked
@@ -370,7 +605,7 @@ class _CalendarPageState extends State<CalendarPage> {
         ),
         const SizedBox(height: 24),
         // Confirm button
-        if (_selectedTimeSlotId != null)
+        if (_selectedTimeSlotId != null && !_loadingSlots)
           SizedBox(
             width: double.infinity,
             child: Container(
@@ -384,7 +619,7 @@ class _CalendarPageState extends State<CalendarPage> {
               ),
               child: ElevatedButton(
                 onPressed: () {
-                  final selectedSlot = mockTimeSlots.firstWhere(
+                  final selectedSlot = _timeSlots.firstWhere(
                     (s) => s.id == _selectedTimeSlotId,
                   );
                   final dateString =

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import './home.dart'; // Import your HomePage
+import '../core/network/auth_service.dart';
+import './register.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,6 +14,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool rememberMe = false;
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  bool _loading = false;
+  String _error = '';
 
   @override
   void dispose() {
@@ -20,23 +24,43 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void login() {
-    String email = emailController.text.trim();
-    String password = passwordController.text.trim();
-    bool isAdmin = false;
+  Future<void> login() async {
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
 
-    // Hardcoded test admin
-    if (email == "admin@test.com" && password == "123456") {
-      isAdmin = true;
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Please enter email and password.');
+      return;
     }
 
-    // Navigate to HomePage with isAdmin flag
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => HomePage(isAdmin: isAdmin),
-      ),
-    );
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
+
+    try {
+      final result = await AuthService.login(email: email, password: password);
+      final user = result['user'] as Map<String, dynamic>;
+      final role = (user['role'] ?? '').toString().toLowerCase();
+      final isAdmin = role == 'admin';
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => HomePage(isAdmin: isAdmin),
+        ),
+      );
+    } catch (e) {
+      final msg = e.toString().contains('Invalid credentials')
+          ? 'Invalid email or password'
+          : 'Login failed. Please try again.';
+      setState(() => _error = msg);
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
   }
 
   @override
@@ -92,6 +116,20 @@ class _LoginScreenState extends State<LoginScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 30),
               child: Column(
                 children: [
+                  if (_error.isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFDE8E8),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _error,
+                        style: const TextStyle(color: Color(0xFFB42318)),
+                      ),
+                    ),
                   // Email
                   TextField(
                     controller: emailController,
@@ -170,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       child: ElevatedButton(
-                        onPressed: login,
+                        onPressed: _loading ? null : login,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
                           shadowColor: Colors.transparent,
@@ -195,7 +233,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       const Text("Don't have an account? "),
                       GestureDetector(
-                        onTap: () {},
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const RegisterPage(),
+                            ),
+                          );
+                        },
                         child: const Text(
                           "Register Here",
                           style: TextStyle(

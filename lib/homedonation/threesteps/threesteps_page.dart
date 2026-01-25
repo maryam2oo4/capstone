@@ -1,11 +1,12 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/state/app_state.dart';
+import '../../core/network/api_client.dart';
 import '../../thanks/home_thanks.dart';
 import 'firststep.dart';
 import 'secondstep.dart';
 import 'thirdstep.dart';
+import 'package:dio/dio.dart';
 
 class ThreeStepsPage extends StatefulWidget {
   final Map<String, dynamic> selectedRequest;
@@ -64,52 +65,169 @@ class _ThreeStepsPageState extends State<ThreeStepsPage> {
     });
   }
 
+  // Convert date from DD/MM/YYYY to YYYY-MM-DD
+  String _convertDateFormat(String dateStr) {
+    try {
+      final parts = dateStr.split('/');
+      if (parts.length == 3) {
+        final day = parts[0].padLeft(2, '0');
+        final month = parts[1].padLeft(2, '0');
+        final year = parts[2];
+        return '$year-$month-$day';
+      }
+      // If already in YYYY-MM-DD format, return as is
+      return dateStr;
+    } catch (e) {
+      debugPrint('Error converting date format: $e');
+      return dateStr;
+    }
+  }
+
   void _handleSubmit(Map<String, dynamic> finalData) async {
     debugPrint('\n========== SUBMITTING ==========');
     debugPrint('Final data:');
     debugPrint(finalData.toString());
     debugPrint('================================');
 
-    // Transform data for API format
-    final appointmentData = {
-      ...finalData,
-      'appointment_date': finalData['selected_date'],
-      'appointment_time': finalData['selected_time'],
-      'hospital_name': widget.selectedRequest['name'],
-      'hospital_id': widget.selectedRequest['id'],
-      'donation_type': widget.donationType,
-    };
-
-    // Remove old keys
-    appointmentData.remove('selected_date');
-    appointmentData.remove('selected_time');
-
-    // Save to state (like saving to database)
-    await context.read<AppState>().addDonationAppointment(appointmentData);
-
+    // Show loading dialog
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) =>
-          const Center(child: CircularProgressIndicator(color: Colors.red)),
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Colors.red),
+      ),
     );
 
-    await Future.delayed(const Duration(seconds: 2));
-    debugPrint('Data saved to state successfully');
+    try {
+      // Transform data for API format
+      final hospitalId = widget.selectedRequest['id']?.toString();
+      if (hospitalId == null) {
+        throw Exception('Hospital ID is missing');
+      }
 
-    if (mounted) Navigator.pop(context);
+      // Convert date from DD/MM/YYYY to YYYY-MM-DD
+      final selectedDateStr = finalData['selected_date']?.toString() ?? '';
+      final appointmentDate = _convertDateFormat(selectedDateStr);
+      
+      // Convert date of birth from DD/MM/YYYY to YYYY-MM-DD
+      final dobStr = finalData['date_of_birth']?.toString() ?? '';
+      final dateOfBirth = _convertDateFormat(dobStr);
 
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => ThankModalHomeBlood(
-          onClose: () {
-            Navigator.pop(context); // Close dialog
-            Navigator.pop(context); // Go back to calendar
-          },
-        ),
-      );
+      // Last donation is already in YYYY-MM-DD format from secondstep
+      final lastDonation = finalData['last_donation']?.toString();
+
+      // Prepare base appointment data
+      final appointmentData = <String, dynamic>{
+        'first_name': finalData['first_name']?.toString() ?? '',
+        'last_name': finalData['last_name']?.toString() ?? '',
+        'email': finalData['email']?.toString() ?? '',
+        'phone_nb': finalData['phone_nb']?.toString() ?? '',
+        'gender': finalData['gender']?.toString() ?? '',
+        'blood_type': finalData['blood_type']?.toString() ?? '',
+        'date_of_birth': dateOfBirth,
+        'hospital_id': hospitalId,
+        'appointment_date': appointmentDate,
+        'appointment_time': finalData['selected_time']?.toString() ?? '',
+        'last_donation': lastDonation,
+      };
+
+      // Add home-specific fields if it's a home appointment
+      if (widget.donationType == 'home') {
+        appointmentData['address'] = finalData['address']?.toString() ?? '';
+        appointmentData['latitude'] = finalData['latitude'];
+        appointmentData['longitude'] = finalData['longitude'];
+        appointmentData['weight'] = finalData['weight']?.toString() ?? '';
+        appointmentData['emerg_contact'] = finalData['emerg_contact']?.toString();
+        appointmentData['emerg_phone'] = finalData['emerg_phone']?.toString();
+        appointmentData['medical_conditions'] = finalData['medical_conditions'];
+      }
+
+      debugPrint('📤 Sending appointment data to backend:');
+      debugPrint(appointmentData.toString());
+
+      // Call appropriate API endpoint
+      final dio = await ApiClient.instance.dio();
+      final endpoint = widget.donationType == 'home'
+          ? '/api/blood/home_appointment'
+          : '/api/hospital/appointments';
+
+      final response = await dio.post(endpoint, data: appointmentData);
+
+      debugPrint('✅ Appointment created successfully');
+      debugPrint('Response: ${response.data}');
+
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      // Save to local state for reference
+      await context.read<AppState>().addDonationAppointment({
+        ...appointmentData,
+        'donation_type': widget.donationType,
+        'hospital_name': widget.selectedRequest['name'],
+      });
+
+      // Show success dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => ThankModalHomeBlood(
+            onClose: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pop(context); // Go back to calendar
+            },
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      debugPrint('❌ API Error: ${e.message}');
+      debugPrint('Response: ${e.response?.data}');
+
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      // Show error message
+      String errorMessage = 'Failed to create appointment. Please try again.';
+      if (e.response != null) {
+        final errorData = e.response?.data;
+        if (errorData is Map) {
+          errorMessage = errorData['message']?.toString() ?? errorMessage;
+          // Check for validation errors
+          if (errorData['errors'] != null) {
+            final errors = errorData['errors'] as Map;
+            final firstError = errors.values.first;
+            if (firstError is List && firstError.isNotEmpty) {
+              errorMessage = firstError.first.toString();
+            }
+          }
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Unexpected error: $e');
+
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('An error occurred: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -163,6 +281,7 @@ class _ThreeStepsPageState extends State<ThreeStepsPage> {
                 selectedRequest: widget.selectedRequest,
                 selectedDate: widget.selectedDate,
                 selectedTime: widget.selectedTime,
+                donationType: widget.donationType,
                 onContinue: _goToNextStep,
               )
             : currentStep == 1
