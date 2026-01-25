@@ -215,7 +215,7 @@ class _SecondStepFormState extends State<SecondStepForm> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: selectedBloodType,
+                initialValue: selectedBloodType,
                 decoration: InputDecoration(
                   hintText: 'Select Blood Type',
                   border: OutlineInputBorder(

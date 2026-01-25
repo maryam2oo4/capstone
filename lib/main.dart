@@ -8,6 +8,8 @@ import '/screens/donation_center.dart';
 import '/screens/contact_us.dart';
 import '/screens/profile.dart';
 import '/widgets/custom_bottom_nav_bar.dart';
+import '/screens/login.dart';
+import '/screens/register.dart';
 
 void main() {
   runApp(
@@ -39,6 +41,8 @@ class MainApp extends StatelessWidget {
           iconTheme: IconThemeData(color: Colors.black),
         ),
       ),
+      home: const LoginScreen(),
+      routes: {'/register': (context) => const RegisterPage()},
       routes: {
         '/login': (_) => const LoginScreen(),
         '/main': (_) => const MainNavigation(),

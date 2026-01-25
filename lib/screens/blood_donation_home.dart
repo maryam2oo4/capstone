@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../homedonation/searchbar.dart';
 import '../homedonation/calendar.dart';
-import '../mockdata/mockhomerequest.dart';
+import '../core/network/api_client.dart';
 
 class BloodDonationHomePage extends StatefulWidget {
   const BloodDonationHomePage({super.key});
@@ -12,6 +12,10 @@ class BloodDonationHomePage extends StatefulWidget {
 
 class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
   String searchQuery = "";
+  bool loading = true;
+  String error = '';
+  List<Map<String, dynamic>> urgentHospitals = [];
+  List<Map<String, dynamic>> regularHospitals = [];
 
   void handleSearch(String query) {
     setState(() {
@@ -19,30 +23,54 @@ class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
     });
   }
 
-  List<Map<String, dynamic>> _filterRequests(
-    List<Map<String, dynamic>> requests,
-  ) {
-    if (searchQuery.isEmpty) return requests;
+  @override
+  void initState() {
+    super.initState();
+    _fetchHospitals();
+  }
 
-    return requests.where((request) {
-      final hospitalName =
-          request["hospital_name"]?.toString().toLowerCase() ?? '';
-      final bloodType = request["blood_type"]?.toString().toLowerCase() ?? '';
-      final address = request["address"]?.toString().toLowerCase() ?? '';
-      final code = request["code"]?.toString().toLowerCase() ?? '';
-      final query = searchQuery.toLowerCase();
+  Future<void> _fetchHospitals() async {
+    setState(() {
+      loading = true;
+      error = '';
+    });
+    try {
+      final dio = await ApiClient.instance.dio();
+      final res = await dio.get('/api/blood/home_donation');
 
-      return hospitalName.contains(query) ||
-          bloodType.contains(query) ||
-          address.contains(query) ||
-          code.contains(query);
+      final urg = (res.data['urgent_hospitals'] as List?) ?? [];
+      final reg = (res.data['regular_hospitals'] as List?) ?? [];
+
+      setState(() {
+        urgentHospitals = urg.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        regularHospitals = reg.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      });
+    } catch (e) {
+      setState(() {
+        error = 'Failed to load hospitals. Make sure the backend is reachable.';
+      });
+    } finally {
+      setState(() => loading = false);
+    }
+  }
+
+  List<Map<String, dynamic>> _filterHospitals(List<Map<String, dynamic>> hospitals) {
+    if (searchQuery.isEmpty) return hospitals;
+
+    final query = searchQuery.toLowerCase();
+    return hospitals.where((h) {
+      final name = h["name"]?.toString().toLowerCase() ?? '';
+      final address = h["address"]?.toString().toLowerCase() ?? '';
+      final code = h["code"]?.toString().toLowerCase() ?? '';
+      final bloodType = h["blood_type_needed"]?.toString().toLowerCase() ?? '';
+      return name.contains(query) || address.contains(query) || code.contains(query) || bloodType.contains(query);
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredUrgent = _filterRequests(urgentHomeAppointments);
-    final filteredRegular = _filterRequests(regularHomeAppointments);
+    final filteredUrgent = _filterHospitals(urgentHospitals);
+    final filteredRegular = _filterHospitals(regularHospitals);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -52,6 +80,9 @@ class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(onPressed: _fetchHospitals, icon: const Icon(Icons.refresh)),
+        ],
       ),
       body: Column(
         children: [
@@ -63,8 +94,22 @@ class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (loading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(color: Colors.red),
+                      ),
+                    ),
+                  if (!loading && error.isNotEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(error, style: const TextStyle(color: Colors.red)),
+                      ),
+                    ),
                   // Urgent Section
-                  if (filteredUrgent.isNotEmpty) ...[
+                  if (!loading && error.isEmpty && filteredUrgent.isNotEmpty) ...[
                     ...filteredUrgent.map(
                       (request) => _buildRequestCard(request, isUrgent: true),
                     ),
@@ -72,7 +117,7 @@ class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
                   ],
 
                   // Regular Section
-                  if (filteredRegular.isNotEmpty) ...[
+                  if (!loading && error.isEmpty && filteredRegular.isNotEmpty) ...[
                     Row(
                       children: [
                         Icon(
@@ -98,7 +143,7 @@ class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
                   ],
 
                   // No results
-                  if (filteredUrgent.isEmpty && filteredRegular.isEmpty)
+                  if (!loading && error.isEmpty && filteredUrgent.isEmpty && filteredRegular.isEmpty)
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.all(32),
@@ -123,6 +168,14 @@ class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
     Map<String, dynamic> request, {
     required bool isUrgent,
   }) {
+    final hospitalName = request["name"] ?? request["hospital_name"] ?? "Unknown Hospital";
+    final code = request["code"] ?? "N/A";
+    final address = request["address"] ?? "N/A";
+    final bloodTypeNeeded = request["blood_type_needed"];
+    final dueDate = request["urgent_due_date"] ?? request["due_date"];
+    final dueTime = request["urgent_due_time"] ?? request["due_time"];
+    final availableSlots = request["available_slots"] ?? request["urgent_slots"] ?? request["regular_slots"];
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
@@ -140,7 +193,16 @@ class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
             context,
             MaterialPageRoute(
               builder: (context) =>
-                  CalendarPage(selectedRequest: request, donationType: 'home'),
+                  CalendarPage(
+                    selectedRequest: {
+                      'id': request['id'],
+                      'name': hospitalName,
+                      'address': address,
+                      'blood_type_needed': bloodTypeNeeded,
+                      'appointment_type': isUrgent ? 'urgent' : 'regular',
+                    },
+                    donationType: 'home',
+                  ),
             ),
           );
         },
@@ -158,7 +220,7 @@ class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          request["hospital_name"] ?? "Unknown Hospital",
+                          hospitalName,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -166,7 +228,7 @@ class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          request["code"] ?? "N/A",
+                          code,
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade600,
@@ -198,33 +260,25 @@ class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
               ),
               const SizedBox(height: 12),
 
-              if (request["blood_type"] != null)
+              if (bloodTypeNeeded != null)
                 _buildInfoRow(
                   Icons.bloodtype,
                   "Blood Type",
-                  request["blood_type"],
+                  bloodTypeNeeded,
                 ),
 
-              _buildInfoRow(
-                Icons.calendar_today,
-                "Date",
-                request["appointment_date"],
-              ),
-              _buildInfoRow(
-                Icons.access_time,
-                "Time",
-                request["appointment_time"],
-              ),
+              if (availableSlots != null)
+                _buildInfoRow(Icons.event_available, "Available Slots", availableSlots.toString()),
 
-              if (isUrgent && request["due_date"] != null)
+              if (isUrgent && dueDate != null)
                 _buildInfoRow(
                   Icons.alarm,
                   "Due",
-                  "${request["due_date"]} at ${request["due_time"]}",
+                  dueTime != null ? "$dueDate at $dueTime" : "$dueDate",
                   isHighlight: true,
                 ),
 
-              _buildInfoRow(Icons.location_on, "Address", request["address"]),
+              _buildInfoRow(Icons.location_on, "Address", address),
             ],
           ),
         ),
