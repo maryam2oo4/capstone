@@ -144,8 +144,12 @@ class _RegisterPageState extends State<RegisterPage> {
       debugPrint('Registration data: $registrationData');
       
       final response = await dio.post(
-        '/api/register',
+        '/register',
         data: registrationData,
+        options: Options(
+          contentType: 'application/json',
+          headers: {'Accept': 'application/json'},
+        ),
       );
       
       debugPrint('Registration response: ${response.statusCode}');

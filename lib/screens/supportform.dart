@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
+
+import '../core/network/financial_service.dart';
 
 class SupportFormScreen extends StatefulWidget {
   final String patientName;
+  final int? patientCaseId;
 
-  const SupportFormScreen({super.key, required this.patientName});
+  const SupportFormScreen({
+    super.key,
+    required this.patientName,
+    this.patientCaseId,
+  });
 
   @override
   State<SupportFormScreen> createState() => _SupportFormScreenState();
@@ -86,7 +94,7 @@ class _SupportFormScreenState extends State<SupportFormScreen> {
     };
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     final double amount = _selectedAmount > 0
         ? _selectedAmount.toDouble()
         : double.tryParse(_customAmountController.text.trim()) ?? 0;
@@ -98,58 +106,108 @@ class _SupportFormScreenState extends State<SupportFormScreen> {
       return;
     }
 
-    // Collect all form data
-    final formData = _collectFormData();
+    final donationType = _donationType == 'monthly' ? 'monthly' : 'one time';
+    final recipientChosen = _selectedRecipient == 'specific'
+        ? 'specific patient'
+        : 'general patient';
+    String paymentMethod = 'credit card';
+    if (_selectedPayment == 'wish') {
+      paymentMethod = 'wish';
+    } else if (_selectedPayment == 'paypal' || _selectedPayment == 'credit') {
+      paymentMethod = 'credit card';
+    } else if (_selectedPayment == 'cash') {
+      paymentMethod = 'cash';
+    }
 
-    // TODO: Send formData to backend when connected
-    print('Form Data to Backend: $formData');
+    final payload = <String, dynamic>{
+      'donation_type': donationType,
+      'donation_amount': amount,
+      'recipient_chosen': recipientChosen,
+      'payment_method': paymentMethod,
+      'name': _fullNameController.text.trim(),
+      'email': _emailController.text.trim(),
+      'phone': _phoneController.text.trim(),
+      'address': _addressController.text.trim(),
+    };
+    if (_selectedRecipient == 'specific' && widget.patientCaseId != null) {
+      payload['patient_case_id'] = widget.patientCaseId;
+    }
 
+    if (!mounted) return;
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.check_circle,
-                color: Color(0xFF10A557),
-                size: 64,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Support Confirmed',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'You pledged \$${amount.toStringAsFixed(2)} as a ${_donationType == 'monthly' ? 'monthly' : 'one-time'} gift.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, color: Colors.black87),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10A557),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Text('Done'),
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      await FinancialService.submitDonation(payload);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.check_circle,
+                  color: Color(0xFF10A557),
+                  size: 64,
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                const Text(
+                  'Support Confirmed',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'You pledged \$${amount.toStringAsFixed(2)} as a ${_donationType == 'monthly' ? 'monthly' : 'one-time'} gift.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14, color: Colors.black87),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10A557),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
     );
+    } on DioException catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      final msg = e.response?.data is Map
+          ? (e.response!.data['message'] ?? e.response!.data['errors']?.toString() ?? '')
+          : e.message;
+      final displayMsg = (msg?.toString().trim() ?? '').isEmpty
+          ? 'Failed to submit donation.'
+          : msg.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(displayMsg)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to submit donation.')),
+      );
+    }
   }
 
   Widget _buildAmountButton(int amount) {
@@ -966,6 +1024,7 @@ class _SupportFormScreenState extends State<SupportFormScreen> {
 class SupportFormContent extends StatefulWidget {
   final String patientName;
   final String selectedPatientName;
+  final int? patientCaseId;
   final VoidCallback? onSelectSpecificPatient;
   final Function(String)? onPatientSelected;
 
@@ -973,6 +1032,7 @@ class SupportFormContent extends StatefulWidget {
     super.key,
     required this.patientName,
     this.selectedPatientName = '',
+    this.patientCaseId,
     this.onSelectSpecificPatient,
     this.onPatientSelected,
   });
@@ -1069,7 +1129,7 @@ class _SupportFormContentState extends State<SupportFormContent> {
     };
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     final double amount = _selectedAmount > 0
         ? _selectedAmount.toDouble()
         : double.tryParse(_customAmountController.text.trim()) ?? 0;
@@ -1081,58 +1141,108 @@ class _SupportFormContentState extends State<SupportFormContent> {
       return;
     }
 
-    // Collect all form data
-    final formData = _collectFormData();
+    final donationType = _donationType == 'monthly' ? 'monthly' : 'one time';
+    final recipientChosen = _selectedRecipient == 'specific'
+        ? 'specific patient'
+        : 'general patient';
+    String paymentMethod = 'credit card';
+    if (_selectedPayment == 'wish') {
+      paymentMethod = 'wish';
+    } else if (_selectedPayment == 'paypal' || _selectedPayment == 'credit') {
+      paymentMethod = 'credit card';
+    } else if (_selectedPayment == 'cash') {
+      paymentMethod = 'cash';
+    }
 
-    // TODO: Send formData to backend when connected
-    print('Form Data to Backend: $formData');
+    final payload = <String, dynamic>{
+      'donation_type': donationType,
+      'donation_amount': amount,
+      'recipient_chosen': recipientChosen,
+      'payment_method': paymentMethod,
+      'name': _fullNameController.text.trim(),
+      'email': _emailController.text.trim(),
+      'phone': _phoneController.text.trim(),
+      'address': _addressController.text.trim(),
+    };
+    if (_selectedRecipient == 'specific' && widget.patientCaseId != null) {
+      payload['patient_case_id'] = widget.patientCaseId;
+    }
 
+    if (!mounted) return;
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.check_circle,
-                color: Color(0xFF10A557),
-                size: 64,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Support Confirmed',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'You pledged \$${amount.toStringAsFixed(2)} as a ${_donationType == 'monthly' ? 'monthly' : 'one-time'} gift.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, color: Colors.black87),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10A557),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Text('Done'),
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      await FinancialService.submitDonation(payload);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.check_circle,
+                  color: Color(0xFF10A557),
+                  size: 64,
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                const Text(
+                  'Support Confirmed',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'You pledged \$${amount.toStringAsFixed(2)} as a ${_donationType == 'monthly' ? 'monthly' : 'one-time'} gift.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14, color: Colors.black87),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10A557),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
     );
+    } on DioException catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      final msg = e.response?.data is Map
+          ? (e.response!.data['message'] ?? e.response!.data['errors']?.toString() ?? '')
+          : e.message;
+      final displayMsg = (msg?.toString().trim() ?? '').isEmpty
+          ? 'Failed to submit donation.'
+          : msg.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(displayMsg)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to submit donation.')),
+      );
+    }
   }
 
   Widget _buildAmountButton(int amount) {

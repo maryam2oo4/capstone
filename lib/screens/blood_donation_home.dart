@@ -36,7 +36,7 @@ class _BloodDonationHomePageState extends State<BloodDonationHomePage> {
     });
     try {
       final dio = await ApiClient.instance.dio();
-      final res = await dio.get('/api/blood/home_donation');
+      final res = await dio.get('/blood/home_donation');
 
       final urg = (res.data['urgent_hospitals'] as List?) ?? [];
       final reg = (res.data['regular_hospitals'] as List?) ?? [];

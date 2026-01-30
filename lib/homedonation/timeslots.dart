@@ -68,8 +68,8 @@ class _TimeSlotsWidgetState extends State<TimeSlotsWidget> {
     try {
       final dio = await ApiClient.instance.dio();
       final endpoint = widget.donationType == 'home'
-          ? '/api/blood/home_donation/${widget.hospitalId}'
-          : '/api/blood/hospital_donation/${widget.hospitalId}';
+          ? '/blood/home_donation/${widget.hospitalId}'
+          : '/blood/hospital_donation/${widget.hospitalId}';
 
       final url = widget.appointmentType != null
           ? '$endpoint?appointment_type=${widget.appointmentType}'

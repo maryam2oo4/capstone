@@ -8,7 +8,7 @@ class AuthService {
   }) async {
     final dio = await ApiClient.instance.dio();
     final res = await dio.post(
-      '/api/mobile/login',
+      '/mobile/login',
       data: {'email': email, 'password': password},
     );
 
@@ -27,6 +27,12 @@ class AuthService {
   }
 
   static Future<void> logout() async {
+    try {
+      final dio = await ApiClient.instance.dio();
+      await dio.post('/logout');
+    } catch (_) {
+      // Ignore: token invalid or network error; still clear local state
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
     await prefs.remove('user_role');

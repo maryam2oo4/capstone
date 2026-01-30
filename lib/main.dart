@@ -8,10 +8,16 @@ import '/screens/donation_center.dart';
 import '/screens/contact_us.dart';
 import '/screens/profile.dart';
 import '/widgets/custom_bottom_nav_bar.dart';
-import '/screens/login.dart';
 import '/screens/register.dart';
+import 'core/network/api_client.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await ApiClient.instance.setBaseUrl(
+    // Laravel API routes are under /api (ApiClient also normalizes this).
+    'https://lifelink-laravel-app-production.up.railway.app/api',
+  );
+
   runApp(
     ChangeNotifierProvider(create: (_) => AppState(), child: const MainApp()),
   );
@@ -51,7 +57,8 @@ class MainApp extends StatelessWidget {
 }
 
 class MainNavigation extends StatefulWidget {
-  const MainNavigation({super.key});
+  final bool isAdmin;
+  const MainNavigation({super.key, this.isAdmin = false});
 
   @override
   State<MainNavigation> createState() => _MainNavigationState();
@@ -59,14 +66,13 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
-
   final List<Widget> _pages = const [
-    HomePage(),
-    LetsPlayPage(),
-    DonationCenterPage(),
-    ContactUsPage(),
-    ProfilePage(),
-  ];
+      const HomePage(isAdmin: true),
+      const LetsPlayPage(),
+      const DonationCenterPage(),
+      const ContactUsPage(),
+      const ProfilePage(),
+    ];
 
   @override
   Widget build(BuildContext context) {

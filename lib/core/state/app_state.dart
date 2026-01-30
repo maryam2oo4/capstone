@@ -43,7 +43,6 @@ class AppState extends ChangeNotifier {
   Future<void> addDonationAppointment(Map<String, dynamic> appointment) async {
     _donationAppointments.add(appointment);
 
-    // 🔍 Console log (like console.log)
     debugPrint('========== DONATION APPOINTMENT SAVED ==========');
     debugPrint('Hospital: ${appointment['hospital_name']}');
     debugPrint('Date: ${appointment['appointment_date']}');
@@ -52,7 +51,7 @@ class AppState extends ChangeNotifier {
       'Donor: ${appointment['first_name']} ${appointment['last_name']}',
     );
     debugPrint('Blood Type: ${appointment['blood_type']}');
-    debugPrint('Phone: ${appointment['phone']}');
+    debugPrint('Phone: ${appointment['phone_nb']}');
     debugPrint(
       'Location: lat=${appointment['latitude']}, lng=${appointment['longitude']}',
     );
@@ -62,11 +61,13 @@ class AppState extends ChangeNotifier {
     debugPrint('Total Appointments: ${_donationAppointments.length}');
     debugPrint('================================================\n');
 
-    await _persistAppointments();
+    try {
+      await _persistAppointments();
+    } catch (e) {
+      debugPrint('⚠️ Failed to persist appointments locally: $e');
+      // Don't rethrow – in-memory list is updated; success UI should still show
+    }
     notifyListeners();
-
-    // TODO: Later replace with API call
-    // await api.post('/api/blood/home_appointment', appointment);
   }
 
   bool _isMedicallyAffected(Map<String, dynamic>? conditions) {

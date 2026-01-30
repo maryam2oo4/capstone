@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'donation.dart';
 import 'app_drawer.dart';
+import '../core/network/public_service.dart';
+import '../core/network/donation_service.dart';
 
 class HomePage extends StatefulWidget {
   final bool isAdmin;
@@ -13,6 +15,33 @@ class HomePage extends StatefulWidget {
 class _HomePage extends State<HomePage> {
   bool _showMoreHeroes = false;
   bool _donationButtonActive = false;
+  Map<String, dynamic>? _donationStats;
+  Map<String, dynamic>? _systemSettings;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoading = true);
+    try {
+      // Only load data if backend is available
+      final stats = await PublicService.getDonationStats();
+      final settings = await PublicService.getSystemSettings();
+      setState(() {
+        _donationStats = stats;
+        _systemSettings = settings;
+      });
+    } catch (e) {
+      debugPrint('Backend not available - running in offline mode: $e');
+      // Continue without backend data for now
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -76,7 +105,12 @@ class _HomePage extends State<HomePage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           ElevatedButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const DonationPage()),
+                              );
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
                               side: BorderSide(
@@ -99,7 +133,12 @@ class _HomePage extends State<HomePage> {
                           ),
                           const SizedBox(width: 15),
                           ElevatedButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const DonationPage()),
+                              );
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color.fromARGB(
                                 255,

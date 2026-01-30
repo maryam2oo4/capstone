@@ -77,8 +77,8 @@ class _CalendarPageState extends State<CalendarPage> {
     try {
       final dio = await ApiClient.instance.dio();
       final endpoint = widget.donationType == 'home'
-          ? '/api/blood/home_donation/$hospitalId'
-          : '/api/blood/hospital_donation/$hospitalId';
+          ? '/blood/home_donation/$hospitalId'
+          : '/blood/hospital_donation/$hospitalId';
       
       final appointmentType = widget.selectedRequest['appointment_type'];
       final url = appointmentType != null
@@ -200,8 +200,8 @@ class _CalendarPageState extends State<CalendarPage> {
     try {
       final dio = await ApiClient.instance.dio();
       final endpoint = widget.donationType == 'home'
-          ? '/api/blood/home_donation/$hospitalId'
-          : '/api/blood/hospital_donation/$hospitalId';
+          ? '/blood/home_donation/$hospitalId'
+          : '/blood/hospital_donation/$hospitalId';
       
       final appointmentType = widget.selectedRequest['appointment_type'];
       final url = appointmentType != null

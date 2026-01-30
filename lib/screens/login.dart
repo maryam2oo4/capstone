@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import './home.dart'; // Import your HomePage
 import '../core/network/auth_service.dart';
 import './register.dart';
-// import './home.dart'; // Not needed when using named routes to main
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -46,35 +44,16 @@ class _LoginScreenState extends State<LoginScreen> {
       final isAdmin = role == 'admin';
 
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => HomePage(isAdmin: isAdmin)),
-      );
+      Navigator.pushReplacementNamed(context, '/main');
     } catch (e) {
       final msg = e.toString().contains('Invalid credentials')
           ? 'Invalid email or password'
-          : 'Login failed. Please try again.';
+          : 'Login failed. Please check your credentials.';
       setState(() => _error = msg);
     } finally {
       if (mounted) {
         setState(() => _loading = false);
       }
-    }
-
-    void login() {
-      final String email = emailController.text.trim();
-      final String password = passwordController.text.trim();
-
-      // TODO: validate credentials (currently bypassed)
-      if (email.isEmpty || password.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter email and password.')),
-        );
-        return;
-      }
-
-      // Navigate to main app with bottom navigation
-      Navigator.pushReplacementNamed(context, '/main');
     }
   }
 

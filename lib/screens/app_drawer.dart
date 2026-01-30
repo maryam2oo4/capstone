@@ -1,4 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+
+import '../core/network/auth_service.dart';
+import '../core/network/public_service.dart';
 import 'dashboard.dart';
 import 'my_donations.dart';
 import 'appointments.dart';
@@ -15,9 +20,38 @@ class AppDrawer extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Image.asset('assets/images/logol.png', height: 40),
+            FutureBuilder<Map<String, dynamic>>(
+              future: PublicService.getSystemSettings(),
+              builder: (context, snapshot) {
+                final logo = snapshot.data?['system_logo'];
+                Widget child = Image.asset(
+                  'assets/images/logol.png',
+                  height: 40,
+                  errorBuilder: (_, __, ___) => Text(
+                    snapshot.data?['platform_name']?.toString() ?? 'LifeLink',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                );
+                if (logo != null && logo.toString().startsWith('data:image')) {
+                  try {
+                    final base64 = logo.toString().split(',').last;
+                    child = Image.memory(
+                      base64Decode(base64),
+                      height: 40,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => child,
+                    );
+                  } catch (_) {}
+                }
+                return Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: child,
+                );
+              },
             ),
             const Divider(),
             Expanded(
@@ -89,8 +123,10 @@ class AppDrawer extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.black87),
               title: const Text('Logout'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
+                await AuthService.logout();
+                if (!context.mounted) return;
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (_) => const LoginScreen()),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
+/// Location picker using OpenStreetMap (Leaflet-style), matching the React
+/// frontend's MapIntegration / Leaflet setup in home blood donation.
 class LocationPickerMap extends StatefulWidget {
   final double initialLatitude;
   final double initialLongitude;
@@ -16,32 +19,24 @@ class LocationPickerMap extends StatefulWidget {
 }
 
 class _LocationPickerMapState extends State<LocationPickerMap> {
-  late GoogleMapController _mapController;
   late LatLng _selectedLocation;
-  late CameraPosition _initialCameraPosition;
+  late MapController _mapController;
 
   @override
   void initState() {
     super.initState();
     _selectedLocation = LatLng(widget.initialLatitude, widget.initialLongitude);
-    _initialCameraPosition = CameraPosition(
-      target: _selectedLocation,
-      zoom: 16,
-    );
+    _mapController = MapController();
   }
 
-  void _onMapCreated(GoogleMapController controller) {
-    _mapController = controller;
-  }
-
-  void _onMapTapped(LatLng position) {
+  void _onMapTap(TapPosition tapPosition, LatLng point) {
     setState(() {
-      _selectedLocation = position;
+      _selectedLocation = point;
     });
   }
 
   void _confirmLocation() {
-    Navigator.pop(context, {
+    Navigator.pop(context, <String, double>{
       'latitude': _selectedLocation.latitude,
       'longitude': _selectedLocation.longitude,
     });
@@ -49,6 +44,8 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
 
   @override
   Widget build(BuildContext context) {
+    const zoom = 15.0;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Select Your Location'),
@@ -56,27 +53,34 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
       ),
       body: Stack(
         children: [
-          GoogleMap(
-            onMapCreated: _onMapCreated,
-            initialCameraPosition: _initialCameraPosition,
-            onTap: _onMapTapped,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: true,
-            markers: {
-              Marker(
-                markerId: const MarkerId('selected_location'),
-                position: _selectedLocation,
-                draggable: true,
-                onDragEnd: (newPosition) {
-                  setState(() {
-                    _selectedLocation = newPosition;
-                  });
-                },
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueRed,
-                ),
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _selectedLocation,
+              initialZoom: zoom,
+              onTap: _onMapTap,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all,
               ),
-            },
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.lifelink',
+              ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: _selectedLocation,
+                    child: Icon(
+                      Icons.location_on,
+                      color: Colors.red.shade700,
+                      size: 48,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           Positioned(
             bottom: 0,
@@ -101,6 +105,11 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
                     'Lat: ${_selectedLocation.latitude.toStringAsFixed(6)}, '
                     'Lng: ${_selectedLocation.longitude.toStringAsFixed(6)}',
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Tap the map to mark your location.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
                   SizedBox(

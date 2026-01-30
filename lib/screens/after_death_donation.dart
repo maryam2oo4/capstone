@@ -1,4 +1,9 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
+
+import '../core/network/organ_donation_service.dart';
+import '../core/network/public_service.dart';
 
 class AfterDeathDonationPage extends StatefulWidget {
   const AfterDeathDonationPage({super.key});
@@ -9,6 +14,8 @@ class AfterDeathDonationPage extends StatefulWidget {
 
 class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
   int _currentStep = 0;
+  bool _isSubmitting = false;
+  String? _errorMessage;
 
   // Step 1 form fields
   final TextEditingController _firstNameController = TextEditingController();
@@ -22,7 +29,62 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _emergencyContactController =
       TextEditingController();
+  final TextEditingController _emergencyContactNumberController =
+      TextEditingController();
   bool _isUnder18 = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Don't add listeners to prevent rapid state changes
+    _loadHospitals();
+  }
+
+  Future<void> _loadHospitals() async {
+    setState(() {
+      _isLoadingHospitals = true;
+      _hospitalLoadError = null;
+    });
+
+    try {
+      final result = await PublicService.getHospitals();
+      if (!mounted) return;
+      // Backend returns either {hospitals: [...]} or direct List
+      List<dynamic> raw;
+      if (result is List) {
+        raw = result;
+      } else if (result is Map) {
+        final h = result['hospitals'] ?? result['data'];
+        raw = h is List ? h : <dynamic>[];
+      } else {
+        raw = <dynamic>[];
+      }
+      final list = raw
+          .map((e) => e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{})
+          .where((m) => (m['name'] ?? m['id']) != null)
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _hospitalList = list;
+        _hospitals = list
+            .map((h) => h['name']?.toString() ?? '')
+            .where((s) => s.isNotEmpty)
+            .toList();
+        _isLoadingHospitals = false;
+        _hospitalLoadError = null;
+      });
+    } catch (e, st) {
+      debugPrint('Failed to load hospitals: $e');
+      debugPrint('Stack trace: $st');
+      if (!mounted) return;
+      setState(() {
+        _isLoadingHospitals = false;
+        _hospitalLoadError = e.toString();
+        _hospitals = [];
+        _hospitalList = [];
+      });
+    }
+  }
 
   // Step 2 form and fields
   final GlobalKey<FormState> _personalFormKey = GlobalKey<FormState>();
@@ -48,17 +110,19 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
     'Intestines',
     'Corneas',
     'Skin',
-    'Bones',
-    'Valves',
+    'Bone Marrow',
+    'Heart Valves',
     'Tendons',
     'Blood Vessels',
   ];
   final Map<String, bool> _selectedOrgans = {};
-  final List<String> _hospitals = [
-    'AL Zahrani Hospital',
-    'Rageb Hareeb Hospital',
-    'AL Rassoul AL Aazam Hospital',
-  ];
+  List<String> _hospitals = [];
+  List<Map<String, dynamic>> _hospitalList = [];
+  bool _isLoadingHospitals = false;
+  String? _hospitalLoadError;
+  String? _idPhotoPath;
+  String? _fatherIdPhotoPath;
+  String? _motherIdPhotoPath;
 
   void _calculateAge(String dob) {
     try {
@@ -90,6 +154,18 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
     }
   }
 
+  void _updateBloodType(String? value) {
+    setState(() {
+      _bloodType = value;
+    });
+  }
+
+  void _updateGender(String? value) {
+    setState(() {
+      _gender = value;
+    });
+  }
+
   bool _validateStep1() {
     return _firstNameController.text.trim().isNotEmpty &&
         _lastNameController.text.trim().isNotEmpty &&
@@ -102,16 +178,217 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
         _emergencyContactController.text.trim().isNotEmpty;
   }
 
+  static const Map<String, String> _organToSlug = {
+    'Heart': 'heart',
+    'Liver': 'liver',
+    'Kidneys': 'kidneys',
+    'Lungs': 'lungs',
+    'Pancreas': 'pancrease',
+    'Intestines': 'intestines',
+    'Corneas': 'corneas',
+    'Skin': 'skin',
+    'Bone Marrow': 'bones',
+    'Heart Valves': 'valves',
+    'Tendons': 'tendons',
+    'Blood Vessels': 'blood-vesseles',
+  };
+
+  String _dobToIso(String dob) {
+    try {
+      final parts = dob.trim().split(RegExp(r'[/\-.]'));
+      if (parts.length >= 3) {
+        int m = int.tryParse(parts[0]) ?? 0;
+        int d = int.tryParse(parts[1]) ?? 0;
+        int y = int.tryParse(parts[2]) ?? 0;
+        if (y < 100) y += 2000;
+        return '${y.toString().padLeft(4, '0')}-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
+      }
+    } catch (_) {}
+    return dob;
+  }
+
+  Future<void> _submitAfterDeathPledge() async {
+    if (_isSubmitting) return;
+
+    if (_idPhotoPath == null || _idPhotoPath!.isEmpty) {
+      setState(() => _errorMessage = 'ID photo is required.');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please upload your ID photo.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_isUnder18 && (_fatherIdPhotoPath == null || _motherIdPhotoPath == null)) {
+      setState(() => _errorMessage = 'Father\'s and Mother\'s ID photos are required for minors.');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please upload both parent ID photos.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final selectedOrgansList = _donateAllOrgans
+          ? ['all-organs']
+          : _selectedOrgans.entries
+              .where((e) => e.value)
+              .map((e) => _organToSlug[e.key] ?? e.key.toLowerCase().replaceAll(' ', '-'))
+              .where((s) => s.isNotEmpty)
+              .toList();
+      if (selectedOrgansList.isEmpty) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select at least one organ.'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      final mStatus = _maritalStatus == null
+          ? null
+          : {
+              'Single': 'single',
+              'Married': 'married',
+              'Divorced or separated': 'divorced',
+              'Widowed': 'widowed',
+            }[_maritalStatus!];
+      final pStatus = _professionalStatus == null
+          ? 'no-work'
+          : (_professionalStatus == 'I work' ? 'working' : 'no-work');
+      final hospitalSelection = _hospitalChoice == 'Specific Hospital' ? 'specific' : 'general';
+      int? hospitalId;
+      if (hospitalSelection == 'specific' && _selectedHospital != null) {
+        for (final h in _hospitalList) {
+          if (h['name']?.toString() == _selectedHospital && h['id'] != null) {
+            hospitalId = h['id'] is int ? h['id'] as int : int.tryParse(h['id'].toString());
+            break;
+          }
+        }
+      }
+
+      final formData = FormData.fromMap({
+        'first_name': _firstNameController.text.trim(),
+        'middle_name': _middleNameController.text.trim().isEmpty ? null : _middleNameController.text.trim(),
+        'last_name': _lastNameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'birth_date': _dobToIso(_dobController.text.trim()),
+        'gender': _gender == 'Male' ? 'male' : (_gender == 'Female' ? 'female' : _gender?.toLowerCase()),
+        'address': _addressController.text.trim(),
+        'emergency_contact': _emergencyContactController.text.trim().isEmpty ? null : _emergencyContactController.text.trim(),
+        'emergency_contact_number': _emergencyContactNumberController.text.trim().isEmpty ? null : _emergencyContactNumberController.text.trim(),
+        'marital_status': mStatus ?? 'single',
+        'education_level': 'Not specified',
+        'professional_status': pStatus,
+        'work_type': pStatus == 'working' ? (_jobTypeController.text.trim().isEmpty ? null : _jobTypeController.text.trim()) : null,
+        'mother_name': _motherNameController.text.trim().isEmpty ? null : _motherNameController.text.trim(),
+        'spouse_name': _spouseNameController.text.trim().isEmpty ? null : _spouseNameController.text.trim(),
+        'blood_type': _bloodType ?? 'O+',
+        'hospital_selection': hospitalSelection,
+        if (hospitalId != null) 'hospital_id': hospitalId,
+      });
+      for (final o in selectedOrgansList) {
+        formData.fields.add(MapEntry('pledged_organs[]', o));
+      }
+
+      formData.files.add(MapEntry(
+        'id_photo',
+        await MultipartFile.fromFile(_idPhotoPath!, filename: 'id_photo.jpg'),
+      ));
+      if (_isUnder18) {
+        if (_fatherIdPhotoPath != null && _fatherIdPhotoPath!.isNotEmpty) {
+          formData.files.add(MapEntry(
+            'father_id_photo',
+            await MultipartFile.fromFile(_fatherIdPhotoPath!, filename: 'father_id_photo.jpg'),
+          ));
+        }
+        if (_motherIdPhotoPath != null && _motherIdPhotoPath!.isNotEmpty) {
+          formData.files.add(MapEntry(
+            'mother_id_photo',
+            await MultipartFile.fromFile(_motherIdPhotoPath!, filename: 'mother_id_photo.jpg'),
+          ));
+        }
+      }
+
+      await OrganDonationService.submitAfterDeathPledgeFormData(formData);
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Success!'),
+          content: const Text(
+            'Your organ donation pledge has been successfully registered. Thank you for your life-saving decision!',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } on DioException catch (e) {
+      String msg;
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        msg = 'Request timed out. Your pledge may have been saved. Please check your email or contact support to confirm.';
+      } else {
+        final raw = e.response?.data is Map
+            ? (e.response!.data['message'] ?? e.response!.data['error'] ?? e.response!.data['errors']?.toString() ?? e.message)
+            : e.message;
+        msg = raw?.toString() ?? 'Failed to submit pledge.';
+      }
+      if (mounted) {
+        setState(() {
+          _errorMessage = msg;
+          _isSubmitting = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage!), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to submit pledge: ${e.toString()}';
+          _isSubmitting = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage!), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
   @override
   void dispose() {
-    _firstNameController.dispose();
-    _middleNameController.dispose();
-    _lastNameController.dispose();
-    _dobController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _addressController.dispose();
-    _emergencyContactController.dispose();
+    // Remove listeners from text controllers
+    final controllers = [
+      _firstNameController,
+      _middleNameController,
+      _lastNameController,
+      _dobController,
+      _emailController,
+      _phoneController,
+      _addressController,
+      _emergencyContactController,
+      _emergencyContactNumberController,
+    ];
+    
+    for (final controller in controllers) {
+      controller.dispose();
+    }
+    
     _motherNameController.dispose();
     _spouseNameController.dispose();
     _exSpouseNameController.dispose();
@@ -842,11 +1119,7 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                         ),
                                       )
                                       .toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  _bloodType = value;
-                                });
-                              },
+                              onChanged: _updateBloodType,
                               decoration: InputDecoration(
                                 filled: true,
                                 fillColor: Colors.grey.shade100,
@@ -926,11 +1199,7 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                     ),
                                   )
                                   .toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  _gender = value;
-                                });
-                              },
+                              onChanged: _updateGender,
                               decoration: InputDecoration(
                                 filled: true,
                                 fillColor: Colors.grey.shade100,
@@ -1102,6 +1371,7 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                             ),
                             const SizedBox(height: 8),
                             TextField(
+                              controller: _emergencyContactNumberController,
                               decoration: InputDecoration(
                                 hintText: 'Enter emergency contact number',
                                 hintStyle: TextStyle(
@@ -1135,13 +1405,22 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: ElevatedButton(
-                              onPressed: _validateStep1()
-                                  ? () {
-                                      setState(() {
-                                        _currentStep = 1;
-                                      });
-                                    }
-                                  : null,
+                              onPressed: () {
+                                // Check validation on button press
+                                if (_validateStep1()) {
+                                  setState(() {
+                                    _currentStep = 1;
+                                  });
+                                } else {
+                                  // Show error message if form is not valid
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Please fill in all required fields'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.transparent,
                                 shadowColor: Colors.transparent,
@@ -1149,7 +1428,6 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                disabledBackgroundColor: Colors.grey,
                               ),
                               child: Text(
                                 'Next Step',
@@ -1705,15 +1983,29 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      'No file chosen',
+                                      _idPhotoPath != null
+                                          ? _idPhotoPath!.split(RegExp(r'[/\\]')).last
+                                          : 'No file chosen',
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: Colors.grey.shade600,
                                       ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                   ElevatedButton(
-                                    onPressed: () {},
+                                    onPressed: () async {
+                                      final result = await FilePicker.platform.pickFiles(
+                                        type: FileType.image,
+                                        allowMultiple: false,
+                                      );
+                                      if (result != null &&
+                                          result.files.isNotEmpty &&
+                                          result.files.single.path != null) {
+                                        setState(() =>
+                                            _idPhotoPath = result.files.single.path);
+                                      }
+                                    },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Color(0xFF2563EB),
                                       padding: EdgeInsets.symmetric(
@@ -1762,15 +2054,29 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        'No file chosen',
+                                        _motherIdPhotoPath != null
+                                            ? _motherIdPhotoPath!.split(RegExp(r'[/\\]')).last
+                                            : 'No file chosen',
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey.shade600,
                                         ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                     ElevatedButton(
-                                      onPressed: () {},
+                                      onPressed: () async {
+                                        final result = await FilePicker.platform.pickFiles(
+                                          type: FileType.image,
+                                          allowMultiple: false,
+                                        );
+                                        if (result != null &&
+                                            result.files.isNotEmpty &&
+                                            result.files.single.path != null) {
+                                          setState(() => _motherIdPhotoPath =
+                                              result.files.single.path);
+                                        }
+                                      },
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: Color(0xFF2563EB),
                                         padding: EdgeInsets.symmetric(
@@ -1778,9 +2084,7 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                           vertical: 10,
                                         ),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
+                                          borderRadius: BorderRadius.circular(6),
                                         ),
                                       ),
                                       child: Text(
@@ -1819,15 +2123,29 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        'No file chosen',
+                                        _fatherIdPhotoPath != null
+                                            ? _fatherIdPhotoPath!.split(RegExp(r'[/\\]')).last
+                                            : 'No file chosen',
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey.shade600,
                                         ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                     ElevatedButton(
-                                      onPressed: () {},
+                                      onPressed: () async {
+                                        final result = await FilePicker.platform.pickFiles(
+                                          type: FileType.image,
+                                          allowMultiple: false,
+                                        );
+                                        if (result != null &&
+                                            result.files.isNotEmpty &&
+                                            result.files.single.path != null) {
+                                          setState(() => _fatherIdPhotoPath =
+                                              result.files.single.path);
+                                        }
+                                      },
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: Color(0xFF2563EB),
                                         padding: EdgeInsets.symmetric(
@@ -1835,9 +2153,7 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                           vertical: 10,
                                         ),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
+                                          borderRadius: BorderRadius.circular(6),
                                         ),
                                       ),
                                       child: Text(
@@ -1858,7 +2174,7 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                         const SizedBox(height: 24),
                         // Action Buttons
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
                             OutlinedButton(
                               onPressed: () {
@@ -1884,6 +2200,7 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 12),
                             OutlinedButton(
                               onPressed: () {
                                 Navigator.pop(context);
@@ -1906,35 +2223,21 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 12),
                             Container(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   begin: Alignment.centerLeft,
                                   end: Alignment.centerRight,
-                                  colors: [
-                                    Color(0xFF1E40AF),
-                                    Color(0xFF2563EB),
-                                  ],
+                                  colors: [Color(0xFF1E40AF), Color(0xFF2563EB)],
                                 ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: ElevatedButton(
                                 onPressed: () {
-                                  final needsMother =
-                                      _maritalStatus == 'Single';
-                                  if (needsMother) {
-                                    if (_personalFormKey.currentState
-                                            ?.validate() ??
-                                        false) {
-                                      setState(() {
-                                        _currentStep = 2;
-                                      });
-                                    }
-                                  } else {
-                                    setState(() {
-                                      _currentStep = 2;
-                                    });
-                                  }
+                                  setState(() {
+                                    _currentStep = 2;
+                                  });
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.transparent,
@@ -2098,35 +2401,72 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        DropdownButtonFormField<String>(
-                          hint: Text('Select Hospital'),
-                          value: _selectedHospital,
-                          items: _hospitals
-                              .map(
-                                (hospital) => DropdownMenuItem(
-                                  value: hospital,
-                                  child: Text(hospital),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedHospital = value;
-                            });
-                          },
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.grey.shade100,
-                            border: OutlineInputBorder(
+                        if (_hospitalLoadError != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade50,
                               borderRadius: BorderRadius.circular(6),
-                              borderSide: BorderSide.none,
+                              border: Border.all(color: Colors.amber.shade200),
                             ),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Could not load hospitals. Please check your connection.',
+                                  style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                                ),
+                                const SizedBox(height: 8),
+                                TextButton.icon(
+                                  onPressed: _isLoadingHospitals ? null : _loadHospitals,
+                                  icon: _isLoadingHospitals
+                                      ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                      : const Icon(Icons.refresh, size: 16),
+                                  label: Text(_isLoadingHospitals ? 'Loading...' : 'Retry'),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          DropdownButtonFormField<String>(
+                            hint: Text(_isLoadingHospitals ? 'Loading hospitals...' : 'Select Hospital'),
+                            value: _selectedHospital,
+                            items: _isLoadingHospitals
+                                ? []
+                                : _hospitals.isEmpty
+                                    ? [
+                                        DropdownMenuItem(
+                                          value: null,
+                                          child: Text('No hospitals available'),
+                                          enabled: false,
+                                        ),
+                                      ]
+                                    : _hospitals.map(
+                                        (hospital) => DropdownMenuItem(
+                                          value: hospital,
+                                          child: Text(hospital),
+                                        ),
+                                      ).toList(),
+                            onChanged: _isLoadingHospitals || _hospitals.isEmpty
+                                ? null
+                                : (value) {
+                                    setState(() {
+                                      _selectedHospital = value;
+                                    });
+                                  },
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Colors.grey.shade100,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(6),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                       const SizedBox(height: 24),
                       // Declaration
@@ -2279,6 +2619,25 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                               ),
                             ),
                           ),
+                          if (_errorMessage != null) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEE2E2),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFFECACA)),
+                              ),
+                              child: Text(
+                                _errorMessage!,
+                                style: const TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
                           Container(
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
@@ -2289,134 +2648,7 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: ElevatedButton(
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  barrierDismissible: false,
-                                  builder: (BuildContext context) {
-                                    return Dialog(
-                                      backgroundColor: Colors.transparent,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                        ),
-                                        padding: EdgeInsets.all(24),
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            // Green checkmark icon
-                                            Container(
-                                              width: 80,
-                                              height: 80,
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFD4EDDA),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Icon(
-                                                Icons.check,
-                                                color: Color(0xFF28A745),
-                                                size: 50,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 16),
-                                            // Title
-                                            Text(
-                                              'Registration Completed!',
-                                              style: TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.black87,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                            const SizedBox(height: 12),
-                                            // Thank you message
-                                            Text(
-                                              'Thank You for Your Support',
-                                              style: TextStyle(
-                                                fontSize: 20,
-                                                fontStyle: FontStyle.italic,
-                                                color: Colors.red,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                            const SizedBox(height: 4),
-                                            // Subtitle
-                                            Text(
-                                              'Your registration is a big support for us!',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.red,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                            const SizedBox(height: 16),
-                                            // Confirmation message
-                                            Container(
-                                              padding: EdgeInsets.all(12),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                                border: Border.all(
-                                                  color: Colors.grey.shade300,
-                                                ),
-                                              ),
-                                              child: Text(
-                                                'A confirmation email has been sent to your registered email address. Please check.',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.black87,
-                                                ),
-                                                textAlign: TextAlign.center,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 20),
-                                            // Back Home button
-                                            SizedBox(
-                                              width: double.infinity,
-                                              child: ElevatedButton(
-                                                onPressed: () {
-                                                  Navigator.pop(context);
-                                                  Navigator.pop(context);
-                                                },
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.red,
-                                                  padding: EdgeInsets.symmetric(
-                                                    horizontal: 40,
-                                                    vertical: 14,
-                                                  ),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          6,
-                                                        ),
-                                                  ),
-                                                ),
-                                                child: Text(
-                                                  'Back Home',
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
+                              onPressed: _isSubmitting ? null : _submitAfterDeathPledge,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.transparent,
                                 shadowColor: Colors.transparent,
@@ -2428,13 +2660,29 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                               ),
-                              child: Text(
-                                'Complete',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_isSubmitting) ...[
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Text(
+                                    _isSubmitting ? 'Submitting...' : 'Complete',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),

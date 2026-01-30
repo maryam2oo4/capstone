@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
+
+import '../core/network/organ_donation_service.dart';
+import '../core/network/public_service.dart';
 
 class AliveOrganDonationPage extends StatefulWidget {
   const AliveOrganDonationPage({super.key});
@@ -9,6 +13,8 @@ class AliveOrganDonationPage extends StatefulWidget {
 
 class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
   final _formKey = GlobalKey<FormState>();
+  bool _isSubmitting = false;
+  String? _errorMessage;
   final _firstNameController = TextEditingController();
   final _middleNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -19,6 +25,7 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
   String? _selectedBloodType;
   String? _selectedOrgan;
   String? _selectedDonationType;
+  String? _gender;
   bool _agreeToTerms = false;
 
   // Health conditions
@@ -42,6 +49,86 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
 
   // Non-directed hospital selection state
   String? _selectedNonDirectedHospital;
+  
+  // Dynamic hospital data (names for UI; full list for resolving hospital_id)
+  List<String> _hospitals = [];
+  List<Map<String, dynamic>> _hospitalList = [];
+  bool _isLoadingHospitals = false;
+  String? _hospitalLoadError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHospitals();
+  }
+
+  Future<void> _loadHospitals() async {
+    setState(() {
+      _isLoadingHospitals = true;
+      _hospitalLoadError = null;
+    });
+
+    try {
+      final result = await PublicService.getHospitals();
+      if (!mounted) return;
+      // Backend returns either {hospitals: [...]} or direct List
+      List<dynamic> raw;
+      if (result is List) {
+        raw = result;
+      } else if (result is Map) {
+        final h = result['hospitals'] ?? result['data'];
+        raw = h is List ? h : <dynamic>[];
+      } else {
+        raw = <dynamic>[];
+      }
+      final list = raw
+          .map((e) => e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{})
+          .where((m) => (m['name'] ?? m['id']) != null)
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _hospitalList = list;
+        _hospitals = list
+            .map((h) => h['name']?.toString() ?? '')
+            .where((s) => s.isNotEmpty)
+            .toList();
+        _isLoadingHospitals = false;
+        _hospitalLoadError = null;
+      });
+    } catch (e, st) {
+      debugPrint('Failed to load hospitals: $e');
+      debugPrint('Stack trace: $st');
+      if (!mounted) return;
+      setState(() {
+        _isLoadingHospitals = false;
+        _hospitalLoadError = e.toString();
+        _hospitals = [];
+        _hospitalList = [];
+      });
+    }
+  }
+
+  /// Backend organ slugs: kidney, liver-partial, bone-marrow.
+  static String? _organToSlug(String? organ) {
+    if (organ == null) return null;
+    switch (organ) {
+      case 'Kidney': return 'kidney';
+      case 'Liver': return 'liver-partial';
+      case 'Bone Marrow': return 'bone-marrow';
+      default: return null;
+    }
+  }
+
+  int? _hospitalNameToId(String? name) {
+    if (name == null || name.isEmpty) return null;
+    for (final h in _hospitalList) {
+      if (h['name']?.toString() == name && h['id'] != null) {
+        final id = h['id'];
+        return id is int ? id : int.tryParse(id.toString());
+      }
+    }
+    return null;
+  }
 
   @override
   void dispose() {
@@ -67,8 +154,7 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
         'email': _emailController.text,
         'phone': _phoneController.text,
         'dateOfBirth': _dateOfBirth?.toIso8601String(),
-        'gender':
-            _selectedBloodType, // Note: This appears to be storing blood type in gender field - you may want to add a separate gender field
+        'gender': _gender,
         'address': _addressController.text,
       },
       'healthInfo': {
@@ -102,29 +188,213 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
     };
   }
 
-  // Method to save data - you can implement local storage or API call here
+  // Method to save data - connect to backend API
   Future<void> _submitRegistration() async {
-    final formData = _collectFormData();
+    if (_isSubmitting) return;
 
-    // TODO: Implement your API call here
-    // Example:
-    // final response = await http.post(
-    //   Uri.parse('https://your-api.com/organ-donation/register'),
-    //   headers: {'Content-Type': 'application/json'},
-    //   body: json.encode(formData),
-    // );
-
-    // For now, print the data to console for testing
-    print('Registration Data: $formData');
-
-    // Show success message
-    if (mounted) {
+    // Validate form
+    if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Registration submitted successfully!'),
-          backgroundColor: Colors.green,
+          content: Text('Please fill in all required fields'),
+          backgroundColor: Colors.red,
         ),
       );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final formData = _collectFormData();
+      final dateBirth = formData['personalInfo']['dateOfBirth'] as String?;
+      final birthDate = dateBirth != null && dateBirth.length >= 10
+          ? dateBirth.substring(0, 10)
+          : dateBirth;
+      if (birthDate == null || birthDate.isEmpty) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please select your Date of Birth.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      final organSlug = _organToSlug(formData['healthInfo']['organToDonate'] as String?);
+      if (organSlug == null) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please select Kidney, Liver, or Bone Marrow.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      if (_gender == null || (_gender != 'Male' && _gender != 'Female')) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select Gender.'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_selectedBloodType == null || _selectedBloodType!.isEmpty) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select your Blood Type.'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_selectedDonationType == null || _selectedDonationType!.isEmpty) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select Donation Type (Directed or Non-Directed).'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      final donationData = <String, dynamic>{
+        'first_name': (formData['personalInfo']['firstName'] as String?)?.trim() ?? '',
+        'middle_name': (formData['personalInfo']['middleName'] as String?)?.trim(),
+        'last_name': (formData['personalInfo']['lastName'] as String?)?.trim() ?? '',
+        'email': (formData['personalInfo']['email'] as String?)?.trim() ?? '',
+        'phone': (formData['personalInfo']['phone'] as String?)?.trim() ?? '',
+        'birth_date': birthDate,
+        'gender': _gender!.toLowerCase(),
+        'address': (formData['personalInfo']['address'] as String?)?.trim() ?? '',
+        'blood_type': _selectedBloodType!,
+        'organ': organSlug,
+        'donation_type': _selectedDonationType! == 'directed' ? 'directed' : 'non-directed',
+        'medical_conditions': formData['healthInfo']['healthConditions'],
+        'agree_interest': _agreeToTerms,
+      };
+
+      if (donationData['donation_type'] == 'directed' && formData['recipientInfo'] != null) {
+        final rec = formData['recipientInfo'] as Map<String, dynamic>;
+        final hospitalId = _hospitalNameToId(rec['hospital'] as String?);
+        if (hospitalId == null) {
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select a valid hospital for the recipient.'), backgroundColor: Colors.red),
+          );
+          return;
+        }
+        final ageRaw = (rec['recipientAge'] as String?)?.trim() ?? '';
+        final age = int.tryParse(ageRaw);
+        if (age == null || age < 1 || age > 120) {
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter a valid recipient age (1–120).'), backgroundColor: Colors.red),
+          );
+          return;
+        }
+        final fullName = (rec['recipientName'] as String?)?.trim() ?? '';
+        if (fullName.isEmpty) {
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter recipient full name.'), backgroundColor: Colors.red),
+          );
+          return;
+        }
+        final contact = (rec['contactPhone'] as String?)?.trim() ?? '';
+        if (contact.isEmpty) {
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter recipient contact (phone or email).'), backgroundColor: Colors.red),
+          );
+          return;
+        }
+        final recipientBlood = rec['recipientBloodType'] as String?;
+        if (recipientBlood == null || recipientBlood.isEmpty) {
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select recipient blood type.'), backgroundColor: Colors.red),
+          );
+          return;
+        }
+        donationData['recipient'] = {
+          'full_name': fullName,
+          'age': age,
+          'contact': contact,
+          'contact_type': rec['contactType'] == 'Email' ? 'email' : 'phone',
+          'blood_type': recipientBlood,
+          'hospital_id': hospitalId,
+        };
+      } else if (donationData['donation_type'] == 'non-directed') {
+        final sel = formData['hospitalSelection']?['selectedHospital'] as String?;
+        final hospitalId = _hospitalNameToId(sel);
+        if (hospitalId != null) {
+          donationData['hospital_selection'] = 'specific';
+          donationData['hospital_id'] = hospitalId;
+        } else {
+          donationData['hospital_selection'] = 'general';
+        }
+      }
+
+      debugPrint('Submitting living donor payload: $donationData');
+      await OrganDonationService.submitLivingDonor(donationData);
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Registration Submitted!'),
+          content: const Text(
+            'Your live organ donation registration has been successfully submitted. The hospital will contact you within 48 hours for the next steps.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } on DioException catch (e) {
+      String msg;
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        msg = 'Request timed out. Your registration may have been saved. Please check your email or contact support to confirm.';
+      } else {
+        final raw = e.response?.data is Map
+            ? (e.response!.data['message'] ?? e.response!.data['error'] ?? e.response!.data['errors']?.toString() ?? e.message)
+            : e.message;
+        msg = raw?.toString() ?? 'Failed to submit registration.';
+      }
+      if (mounted) {
+        setState(() {
+          _errorMessage = msg;
+          _isSubmitting = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage!), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to submit registration: ${e.toString()}';
+          _isSubmitting = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage!), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
     }
   }
 
@@ -839,7 +1109,7 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                               ),
                               const SizedBox(height: 10),
                               DropdownButtonFormField<String>(
-                                value: null,
+                                value: _gender,
                                 decoration: InputDecoration(
                                   labelText: 'Gender',
                                   border: OutlineInputBorder(
@@ -859,12 +1129,10 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                     value: 'Female',
                                     child: Text('Female'),
                                   ),
-                                  DropdownMenuItem(
-                                    value: 'Other',
-                                    child: Text('Other'),
-                                  ),
                                 ],
-                                onChanged: (value) {},
+                                onChanged: (value) {
+                                  setState(() => _gender = value);
+                                },
                               ),
                               const SizedBox(height: 12),
                               // Address
@@ -1351,51 +1619,81 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                 ),
                                 const SizedBox(height: 10),
                                 // Hospital
-                                DropdownButtonFormField<String>(
-                                  value: _recipientHospital,
-                                  decoration: InputDecoration(
-                                    labelText: 'Hospital',
-                                    labelStyle: const TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
+                                if (_hospitalLoadError != null) ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.amber.shade200),
                                     ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Could not load hospitals. Please check your connection.',
+                                          style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        TextButton.icon(
+                                          onPressed: _isLoadingHospitals ? null : _loadHospitals,
+                                          icon: _isLoadingHospitals
+                                              ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                              : const Icon(Icons.refresh, size: 16),
+                                          label: Text(_isLoadingHospitals ? 'Loading...' : 'Retry'),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.black87,
+                                ] else
+                                  DropdownButtonFormField<String>(
+                                    value: _recipientHospital,
+                                    decoration: InputDecoration(
+                                      labelText: 'Hospital',
+                                      labelStyle: const TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.black87,
+                                    ),
+                                    items: _isLoadingHospitals
+                                        ? []
+                                        : _hospitals.isEmpty
+                                            ? [
+                                                DropdownMenuItem(
+                                                  value: null,
+                                                  child: Text('No hospitals available'),
+                                                  enabled: false,
+                                                ),
+                                              ]
+                                            : _hospitals.map(
+                                                (hospital) => DropdownMenuItem(
+                                                  value: hospital,
+                                                  child: Text(hospital),
+                                                ),
+                                              ).toList(),
+                                    onChanged: _isLoadingHospitals || _hospitals.isEmpty
+                                        ? null
+                                        : (value) {
+                                            setState(() {
+                                              _recipientHospital = value;
+                                            });
+                                          },
+                                    hint: Text(
+                                      _isLoadingHospitals ? 'Loading hospitals...' : 'Select Hospital',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
                                   ),
-                                  items:
-                                      const [
-                                            'City Hospital',
-                                            'General Hospital',
-                                            'Medical Center',
-                                            'University Hospital',
-                                            'Regional Hospital',
-                                          ]
-                                          .map(
-                                            (hospital) => DropdownMenuItem(
-                                              value: hospital,
-                                              child: Text(hospital),
-                                            ),
-                                          )
-                                          .toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _recipientHospital = value;
-                                    });
-                                  },
-                                  hint: const Text(
-                                    'Select Hospital',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
-                                ),
                               ],
                             ),
                           ),
@@ -1419,51 +1717,81 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                   Icons.local_hospital,
                                 ),
                                 const SizedBox(height: 12),
-                                DropdownButtonFormField<String>(
-                                  value: _selectedNonDirectedHospital,
-                                  decoration: InputDecoration(
-                                    labelText: 'Hospital',
-                                    labelStyle: const TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
+                                if (_hospitalLoadError != null) ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.amber.shade200),
                                     ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Could not load hospitals. Please check your connection.',
+                                          style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        TextButton.icon(
+                                          onPressed: _isLoadingHospitals ? null : _loadHospitals,
+                                          icon: _isLoadingHospitals
+                                              ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                              : const Icon(Icons.refresh, size: 16),
+                                          label: Text(_isLoadingHospitals ? 'Loading...' : 'Retry'),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.black87,
+                                ] else
+                                  DropdownButtonFormField<String>(
+                                    value: _selectedNonDirectedHospital,
+                                    decoration: InputDecoration(
+                                      labelText: 'Hospital',
+                                      labelStyle: const TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.black87,
+                                    ),
+                                    items: _isLoadingHospitals
+                                        ? []
+                                        : _hospitals.isEmpty
+                                            ? [
+                                                DropdownMenuItem(
+                                                  value: null,
+                                                  child: Text('No hospitals available'),
+                                                  enabled: false,
+                                                ),
+                                              ]
+                                            : _hospitals.map(
+                                                (hospital) => DropdownMenuItem(
+                                                  value: hospital,
+                                                  child: Text(hospital),
+                                                ),
+                                              ).toList(),
+                                    onChanged: _isLoadingHospitals || _hospitals.isEmpty
+                                        ? null
+                                        : (value) {
+                                            setState(() {
+                                              _selectedNonDirectedHospital = value;
+                                            });
+                                          },
+                                    hint: Text(
+                                      _isLoadingHospitals ? 'Loading hospitals...' : 'Select Hospital',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
                                   ),
-                                  items:
-                                      const [
-                                            'AL Zahrani Hospital',
-                                            'Rageb Hareb Hospital',
-                                            'AL Rassoul AL Aazam Hospital',
-                                            'King Faisal Specialist Hospital',
-                                            'Prince Sultan Medical City',
-                                          ]
-                                          .map(
-                                            (hospital) => DropdownMenuItem(
-                                              value: hospital,
-                                              child: Text(hospital),
-                                            ),
-                                          )
-                                          .toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _selectedNonDirectedHospital = value;
-                                    });
-                                  },
-                                  hint: const Text(
-                                    'Select Hospital',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
-                                ),
                               ],
                             ),
                           ),
@@ -1508,6 +1836,26 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                           ),
                         ),
                         const SizedBox(height: 16),
+                        // Error Display
+                        if (_errorMessage != null) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEE2E2),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFFECACA)),
+                            ),
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(
+                                color: Color(0xFFDC2626),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         // Submit Button
                         Container(
                           width: double.infinity,
@@ -1531,7 +1879,7 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                 borderRadius: BorderRadius.circular(6),
                               ),
                             ),
-                            onPressed: () async {
+                            onPressed: _isSubmitting ? null : () async {
                               if (_formKey.currentState!.validate() &&
                                   _agreeToTerms) {
                                 // Submit registration
@@ -1544,19 +1892,32 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                 );
                               }
                             },
-                            child: const Row(
+                            child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.send, size: 16, color: Colors.white),
-                                SizedBox(width: 6),
+                                if (_isSubmitting) ...[
+                                  SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
                                 Text(
-                                  'Send Request',
+                                  _isSubmitting ? 'Submitting...' : 'Send Request',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: Colors.white,
                                   ),
                                 ),
+                                if (!_isSubmitting) ...[
+                                  const SizedBox(width: 6),
+                                  const Icon(Icons.send, size: 16, color: Colors.white),
+                                ],
                               ],
                             ),
                           ),

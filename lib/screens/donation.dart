@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
+
 import 'supportform.dart';
 import 'app_drawer.dart';
+import '../core/network/financial_service.dart';
 
 class DonationPage extends StatefulWidget {
   const DonationPage({super.key});
@@ -10,18 +13,90 @@ class DonationPage extends StatefulWidget {
 }
 
 class _DonationPage extends State<DonationPage> {
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _patients = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPatientCases();
+  }
+
+  Future<void> _loadPatientCases() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final data = await FinancialService.getPatientCases();
+      if (!mounted) return;
+      final raw = data['patientCases'];
+      final list = raw is List
+          ? raw
+              .map((e) => e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{})
+              .toList()
+          : <Map<String, dynamic>>[];
+      setState(() {
+        _patients = list;
+        _loading = false;
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = e.response?.data is Map
+          ? (e.response!.data['message'] ?? e.response!.data['error'] ?? '')
+          : e.message;
+      final errStr = msg?.toString().trim() ?? '';
+      setState(() {
+        _error = errStr.isEmpty ? 'Failed to load patient cases.' : errStr;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to load patient cases.';
+        _loading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: AppDrawer(),
       appBar: AppBar(
-        title: Text('My App'),
+        title: const Text('Financial Support'),
         elevation: 6,
         shadowColor: Colors.black45,
       ),
       extendBodyBehindAppBar: false,
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _error!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.red, fontSize: 14),
+                          ),
+                          const SizedBox(height: 16),
+                          TextButton.icon(
+                            onPressed: _loadPatientCases,
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : SingleChildScrollView(
           padding: EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -350,10 +425,10 @@ class _DonationPage extends State<DonationPage> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Patients list (vertical column)
+              // Patients list (vertical column) — from API
               Container(
                 width: double.infinity,
-                margin: EdgeInsets.only(top: 8),
+                margin: const EdgeInsets.only(top: 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -362,7 +437,7 @@ class _DonationPage extends State<DonationPage> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
+                          const Text(
                             'Patients Who Need Your Help',
                             style: TextStyle(
                               fontSize: 16,
@@ -379,68 +454,74 @@ class _DonationPage extends State<DonationPage> {
                         ],
                       ),
                     ),
-                    SizedBox(height: 12),
-                    // vertical list of patient cards
-                    Column(
-                      children: [
-                        PatientCard(
-                          imagePath: 'assets/images/articlepic.png',
-                          name: 'Ali, 12',
-                          title: 'Kidney Transplant',
-                          description:
-                              'Ahmed has been on dialysis for 2 years and urgently needs a kidney transplant. His family cannot afford the surgery costs.',
-                          raised: 8500,
-                          goal: 25000,
-                          onSupport: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    SupportFormScreen(patientName: 'Ali'),
+                    const SizedBox(height: 12),
+                    _patients.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: Text(
+                                'No patient cases at the moment.',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
                               ),
-                            );
-                          },
-                        ),
-                        SizedBox(height: 12),
-                        PatientCard(
-                          imagePath: 'assets/images/articlepic.png',
-                          name: 'Maya, 7',
-                          title: 'Heart Surgery',
-                          description:
-                              'Requires urgent heart surgery; family seeks help to cover operation and hospitalization.',
-                          raised: 4200,
-                          goal: 18000,
-                          onSupport: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    SupportFormScreen(patientName: 'Maya'),
-                              ),
-                            );
-                          },
-                        ),
-                        SizedBox(height: 12),
-                        PatientCard(
-                          imagePath: 'assets/images/articlepic.png',
-                          name: 'Omar, 34',
-                          title: 'Cancer Treatment',
-                          description:
-                              'Needs funding for chemotherapy and supportive care for recovery.',
-                          raised: 6200,
-                          goal: 15000,
-                          onSupport: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    SupportFormScreen(patientName: 'Omar'),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
+                            ),
+                          )
+                        : Column(
+                            children: _patients.asMap().entries.map((entry) {
+                              final p = entry.value;
+                              final name = (p['patientName'] ?? '').toString();
+                              final age = p['age'];
+                              final displayName = age != null
+                                  ? '$name, $age'
+                                  : name.isNotEmpty
+                                      ? name
+                                      : 'Patient';
+                              final title =
+                                  (p['condition'] ?? p['case_title'] ?? '—').toString();
+                              final description =
+                                  (p['description'] ?? '').toString();
+                              final raised = (p['currentFunding'] ?? 0);
+                              final goal = (p['targetFunding'] ?? 0);
+                              final raisedNum = raised is num
+                                  ? raised.toDouble()
+                                  : (double.tryParse(raised.toString()) ?? 0);
+                              final goalNum = goal is num
+                                  ? goal.toDouble()
+                                  : (double.tryParse(goal.toString()) ?? 0);
+                              final imagePath =
+                                  (p['image'] ?? 'assets/images/articlepic.png')
+                                      .toString();
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: PatientCard(
+                                  imagePath: imagePath,
+                                  name: displayName,
+                                  title: title,
+                                  description: description,
+                                  raised: raisedNum,
+                                  goal: goalNum,
+                                  onSupport: () {
+                                    final caseId = p['id'];
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => SupportFormScreen(
+                                          patientName: name.isNotEmpty
+                                              ? name
+                                              : displayName.split(',').first.trim(),
+                                          patientCaseId: caseId is int
+                                              ? caseId
+                                              : (caseId != null ? int.tryParse(caseId.toString()) : null),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              );
+                            }).toList(),
+                          ),
                   ],
                 ),
               ),
@@ -548,14 +629,27 @@ class PatientCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: Image.asset(
-              imagePath,
-              width: 96,
-              height: 96,
-              fit: BoxFit.cover,
-              errorBuilder: (c, e, s) =>
-                  Container(width: 96, height: 96, color: Colors.grey[300]),
-            ),
+            child: imagePath.startsWith('http')
+                ? Image.network(
+                    imagePath,
+                    width: 96,
+                    height: 96,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) => Container(
+                      width: 96,
+                      height: 96,
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.person, size: 40),
+                    ),
+                  )
+                : Image.asset(
+                    imagePath,
+                    width: 96,
+                    height: 96,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) =>
+                        Container(width: 96, height: 96, color: Colors.grey[300]),
+                  ),
           ),
           SizedBox(width: 12),
           Expanded(

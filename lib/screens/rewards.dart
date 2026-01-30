@@ -27,7 +27,7 @@ class _RewardsPageState extends State<RewardsPage> {
     });
     try {
       final dio = await ApiClient.instance.dio();
-      final res = await dio.get('/api/donor/rewards/shop');
+      final res = await dio.get('/donor/rewards/shop');
       setState(() {
         xp = (res.data['current_xp'] ?? 0) as int;
         products = (res.data['products'] as List?) ?? [];

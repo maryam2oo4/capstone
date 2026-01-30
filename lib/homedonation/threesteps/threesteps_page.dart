@@ -148,10 +148,17 @@ class _ThreeStepsPageState extends State<ThreeStepsPage> {
       // Call appropriate API endpoint
       final dio = await ApiClient.instance.dio();
       final endpoint = widget.donationType == 'home'
-          ? '/api/blood/home_appointment'
-          : '/api/hospital/appointments';
+          ? '/blood/home_appointment'
+          : '/hospital/appointments';
 
-      final response = await dio.post(endpoint, data: appointmentData);
+      final response = await dio.post<Map<String, dynamic>>(
+        endpoint,
+        data: appointmentData,
+        options: Options(
+          contentType: 'application/json',
+          headers: {'Accept': 'application/json'},
+        ),
+      );
 
       debugPrint('✅ Appointment created successfully');
       debugPrint('Response: ${response.data}');
@@ -192,9 +199,8 @@ class _ThreeStepsPageState extends State<ThreeStepsPage> {
         final errorData = e.response?.data;
         if (errorData is Map) {
           errorMessage = errorData['message']?.toString() ?? errorMessage;
-          // Check for validation errors
-          if (errorData['errors'] != null) {
-            final errors = errorData['errors'] as Map;
+          final errors = errorData['errors'];
+          if (errors is Map && errors.isNotEmpty) {
             final firstError = errors.values.first;
             if (firstError is List && firstError.isNotEmpty) {
               errorMessage = firstError.first.toString();
