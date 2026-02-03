@@ -7,7 +7,6 @@ import '../core/network/public_service.dart';
 import 'dashboard.dart';
 import 'my_donations.dart';
 import 'appointments.dart';
-import 'rewards.dart';
 import 'login.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -101,21 +100,7 @@ class AppDrawer extends StatelessWidget {
                       );
                     },
                   ),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.emoji_events,
-                      color: Colors.black87,
-                    ),
-                    title: const Text('Rewards'),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const RewardsPage()),
-                      );
-                    },
-                  ),
+                  // Rewards entry removed
                 ],
               ),
             ),
@@ -124,12 +109,15 @@ class AppDrawer extends StatelessWidget {
               leading: const Icon(Icons.logout, color: Colors.black87),
               title: const Text('Logout'),
               onTap: () async {
+                // Close drawer
                 Navigator.pop(context);
+                // Call logout API and clear local auth state
                 await AuthService.logout();
                 if (!context.mounted) return;
-                Navigator.pushReplacement(
-                  context,
+                // Remove all routes and go to login
+                Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
                 );
               },
             ),

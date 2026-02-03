@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:url_launcher/url_launcher_string.dart';
+import 'lets_play_webview.dart';
 
 class LetsPlayPage extends StatelessWidget {
   const LetsPlayPage({super.key});
@@ -12,7 +11,7 @@ class LetsPlayPage extends StatelessWidget {
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: const Text("Let's Play"),
-        backgroundColor: const Color.fromARGB(255, 255, 253, 253),
+        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
         elevation: 0,
       ),
       body: Container(
@@ -20,10 +19,7 @@ class LetsPlayPage extends StatelessWidget {
         height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              Color(0xFF2D124D),
-              Color(0xFFB71C1C),
-            ], // dark purple to dark red
+            colors: [Color(0xFF2D124D), Color(0xFFB71C1C)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -80,9 +76,18 @@ class LetsPlayPage extends StatelessWidget {
                 width: 120,
                 height: 44,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const LetsPlayWebViewPage(
+                          url:
+                              'https://life-link-react-app.vercel.app/quizlit/welcome',
+                        ),
+                      ),
+                    );
+                  },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color.fromARGB(255, 253, 252, 252),
+                    backgroundColor: Color(0xFFFF1744),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -91,7 +96,7 @@ class LetsPlayPage extends StatelessWidget {
                   child: const Text(
                     'Start',
                     style: TextStyle(
-                      color: Color.fromARGB(255, 134, 2, 2),
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
                     ),

@@ -146,7 +146,9 @@ class _SupportFormScreenState extends State<SupportFormScreen> {
       showDialog(
         context: context,
         builder: (ctx) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -188,19 +190,21 @@ class _SupportFormScreenState extends State<SupportFormScreen> {
             ),
           ),
         ),
-    );
+      );
     } on DioException catch (e) {
       if (!mounted) return;
       Navigator.of(context).pop();
       final msg = e.response?.data is Map
-          ? (e.response!.data['message'] ?? e.response!.data['errors']?.toString() ?? '')
+          ? (e.response!.data['message'] ??
+                e.response!.data['errors']?.toString() ??
+                '')
           : e.message;
       final displayMsg = (msg?.toString().trim() ?? '').isEmpty
           ? 'Failed to submit donation.'
           : msg.toString();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(displayMsg)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(displayMsg)));
     } catch (_) {
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -303,49 +307,45 @@ class _SupportFormScreenState extends State<SupportFormScreen> {
   }
 
   Widget _buildFaqGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 700 ? 2 : 1;
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _faqs.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 3,
+    return Column(
+      children: _faqs
+          .map(
+            (faq) => Column(
+              children: [
+                _buildFAQItem(faq['q']!, faq['a']!),
+                const SizedBox(height: 12),
+              ],
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildFAQItem(String question, String answer) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            question,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
           ),
-          itemBuilder: (context, index) {
-            final faq = _faqs[index];
-            return Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8F9FA),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    faq['q']!,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    faq['a']!,
-                    style: const TextStyle(fontSize: 12, color: Colors.black87),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+          const SizedBox(height: 6),
+          Text(
+            answer,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+          ),
+        ],
+      ),
     );
   }
 
@@ -667,8 +667,8 @@ class _SupportFormScreenState extends State<SupportFormScreen> {
                     children: [
                       _buildChoiceCard(
                         keyValue: 'general',
-                        title: 'General Patient Fund',
-                        subtitle: 'Supports any urgent medical case',
+                        title: 'General Fund',
+                        subtitle: 'Help anyone',
                         icon: Icons.shield_moon,
                         groupValue: _selectedRecipient,
                         onSelect: (val) => _selectedRecipient = val,
@@ -677,7 +677,7 @@ class _SupportFormScreenState extends State<SupportFormScreen> {
                       _buildChoiceCard(
                         keyValue: 'specific',
                         title: 'Specific Patient',
-                        subtitle: 'Choose a patient to support directly',
+                        subtitle: 'Help one person',
                         icon: Icons.person,
                         groupValue: _selectedRecipient,
                         onSelect: (val) => _selectedRecipient = val,
@@ -1181,7 +1181,9 @@ class _SupportFormContentState extends State<SupportFormContent> {
       showDialog(
         context: context,
         builder: (ctx) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -1223,19 +1225,21 @@ class _SupportFormContentState extends State<SupportFormContent> {
             ),
           ),
         ),
-    );
+      );
     } on DioException catch (e) {
       if (!mounted) return;
       Navigator.of(context).pop();
       final msg = e.response?.data is Map
-          ? (e.response!.data['message'] ?? e.response!.data['errors']?.toString() ?? '')
+          ? (e.response!.data['message'] ??
+                e.response!.data['errors']?.toString() ??
+                '')
           : e.message;
       final displayMsg = (msg?.toString().trim() ?? '').isEmpty
           ? 'Failed to submit donation.'
           : msg.toString();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(displayMsg)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(displayMsg)));
     } catch (_) {
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -1338,49 +1342,45 @@ class _SupportFormContentState extends State<SupportFormContent> {
   }
 
   Widget _buildFaqGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 700 ? 2 : 1;
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _faqs.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 3,
+    return Column(
+      children: _faqs
+          .map(
+            (faq) => Column(
+              children: [
+                _buildFAQItem(faq['q']!, faq['a']!),
+                const SizedBox(height: 12),
+              ],
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildFAQItem(String question, String answer) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            question,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
           ),
-          itemBuilder: (context, index) {
-            final faq = _faqs[index];
-            return Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8F9FA),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    faq['q']!,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    faq['a']!,
-                    style: const TextStyle(fontSize: 12, color: Colors.black87),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+          const SizedBox(height: 6),
+          Text(
+            answer,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1684,8 +1684,8 @@ class _SupportFormContentState extends State<SupportFormContent> {
                 children: [
                   _buildChoiceCard(
                     keyValue: 'general',
-                    title: 'General Patient Fund',
-                    subtitle: 'Supports any urgent medical case',
+                    title: 'General Fund',
+                    subtitle: 'Help anyone',
                     icon: Icons.shield_moon,
                     groupValue: _selectedRecipient,
                     onSelect: (val) {
@@ -1697,7 +1697,7 @@ class _SupportFormContentState extends State<SupportFormContent> {
                     keyValue: 'specific',
                     title: 'Specific Patient',
                     subtitle: widget.selectedPatientName.isEmpty
-                        ? 'Choose a patient to support directly'
+                        ? 'Help one person'
                         : 'Donate for ${widget.selectedPatientName}',
                     icon: Icons.person,
                     groupValue: _selectedRecipient,

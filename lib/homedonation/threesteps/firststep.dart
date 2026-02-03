@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'location_picker_map.dart';
+import '../../core/network/settings_service.dart';
 
 class FirstStepForm extends StatefulWidget {
   final Map<String, dynamic> selectedRequest;
@@ -61,6 +62,26 @@ class _FirstStepFormState extends State<FirstStepForm> {
     addressController = TextEditingController();
     emergContactController = TextEditingController();
     emergPhoneController = TextEditingController();
+    _prefillFromRegistration();
+  }
+
+  Future<void> _prefillFromRegistration() async {
+    try {
+      final data = await SettingsService.getAllSettings();
+      final user = data['profile']?['user'] ?? {};
+      final donor = data['profile']?['donor'] ?? {};
+      firstNameController.text = user['first_name'] ?? '';
+      lastNameController.text = user['last_name'] ?? '';
+      emailController.text = user['email'] ?? '';
+      phoneController.text = user['phone_nb'] ?? '';
+      dateOfBirthController.text = donor['date_of_birth'] ?? '';
+      addressController.text = user['address'] ?? donor['address'] ?? '';
+      // Optionally prefill city, gender, etc. if available
+      setState(() {});
+    } catch (e) {
+      // ignore: avoid_print
+      print('Failed to prefill registration info: $e');
+    }
   }
 
   @override
@@ -398,7 +419,9 @@ class _FirstStepFormState extends State<FirstStepForm> {
                             latitude != null
                                 ? Icons.location_on
                                 : Icons.location_off,
-                            color: latitude != null ? Colors.green : Colors.grey,
+                            color: latitude != null
+                                ? Colors.green
+                                : Colors.grey,
                           ),
                           const SizedBox(width: 12),
                           Expanded(

@@ -33,50 +33,52 @@ class CustomBottomNavBar extends StatelessWidget {
             final item = destinations[index];
             final isSelected = selectedIndex == index;
 
-            return GestureDetector(
-              onTap: () => onDestinationSelected(index),
-              child: SizedBox(
-                width: 74,
-                height: 72,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (item.isCenter && isSelected)
-                      // Center item highlight circle - RED filled with white icon
-                      Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF01010),
-                          shape: BoxShape.circle,
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => onDestinationSelected(index),
+                child: SizedBox(
+                  width: 74,
+                  height: 72,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (item.isCenter && isSelected)
+                        // Center item highlight circle - RED filled with white icon
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF01010),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(item.icon, size: 24, color: Colors.white),
+                        )
+                      else
+                        Icon(
+                          item.icon,
+                          size: 24,
+                          color: isSelected
+                              ? const Color(0xFFF01010)
+                              : Colors.grey[600],
                         ),
-                        child: Icon(item.icon, size: 24, color: Colors.white),
-                      )
-                    else
-                      Icon(
-                        item.icon,
-                        size: 24,
-                        color: isSelected
-                            ? const Color(0xFFF01010)
-                            : Colors.grey[600],
+                      const SizedBox(height: 2),
+                      Text(
+                        item.label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          color: isSelected
+                              ? const Color(0xFFF01010)
+                              : Colors.grey[600],
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.label,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: isSelected
-                            ? const Color(0xFFF01010)
-                            : Colors.grey[600],
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );

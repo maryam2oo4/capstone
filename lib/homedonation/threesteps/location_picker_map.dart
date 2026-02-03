@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-/// Location picker using OpenStreetMap (Leaflet-style), matching the React
-/// frontend's MapIntegration / Leaflet setup in home blood donation.
 class LocationPickerMap extends StatefulWidget {
   final double initialLatitude;
   final double initialLongitude;
@@ -20,23 +18,18 @@ class LocationPickerMap extends StatefulWidget {
 
 class _LocationPickerMapState extends State<LocationPickerMap> {
   late LatLng _selectedLocation;
-  late MapController _mapController;
 
   @override
   void initState() {
     super.initState();
-    _selectedLocation = LatLng(widget.initialLatitude, widget.initialLongitude);
-    _mapController = MapController();
-  }
-
-  void _onMapTap(TapPosition tapPosition, LatLng point) {
-    setState(() {
-      _selectedLocation = point;
-    });
+    _selectedLocation = LatLng(
+      widget.initialLatitude,
+      widget.initialLongitude,
+    );
   }
 
   void _confirmLocation() {
-    Navigator.pop(context, <String, double>{
+    Navigator.pop(context, {
       'latitude': _selectedLocation.latitude,
       'longitude': _selectedLocation.longitude,
     });
@@ -44,8 +37,6 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
 
   @override
   Widget build(BuildContext context) {
-    const zoom = 15.0;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Select Your Location'),
@@ -54,34 +45,40 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
       body: Stack(
         children: [
           FlutterMap(
-            mapController: _mapController,
             options: MapOptions(
-              initialCenter: _selectedLocation,
-              initialZoom: zoom,
-              onTap: _onMapTap,
-              interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.all,
-              ),
+              center: _selectedLocation,
+              zoom: 16,
+              onTap: (tapPosition, point) {
+                setState(() {
+                  _selectedLocation = point;
+                });
+              },
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.lifelink',
-              ),
+  urlTemplate:
+      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  subdomains: ['a', 'b', 'c', 'd'],
+),
+
               MarkerLayer(
                 markers: [
                   Marker(
-                    point: _selectedLocation,
-                    child: Icon(
-                      Icons.location_on,
-                      color: Colors.red.shade700,
-                      size: 48,
-                    ),
-                  ),
+  point: _selectedLocation,
+  width: 40,
+  height: 40,
+  builder: (context) => const Icon(
+    Icons.location_pin,
+    color: Colors.red,
+    size: 40,
+  ),
+),
                 ],
               ),
             ],
           ),
+
+          /// Bottom confirmation panel
           Positioned(
             bottom: 0,
             left: 0,
@@ -104,12 +101,10 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
                   Text(
                     'Lat: ${_selectedLocation.latitude.toStringAsFixed(6)}, '
                     'Lng: ${_selectedLocation.longitude.toStringAsFixed(6)}',
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Tap the map to mark your location.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   SizedBox(

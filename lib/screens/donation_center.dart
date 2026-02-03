@@ -82,128 +82,125 @@ class _DonationCenterPageState extends State<DonationCenterPage> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _error!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextButton.icon(
-                            onPressed: _loadData,
-                            icon: const Icon(Icons.refresh, size: 18),
-                            label: const Text('Retry'),
-                          ),
-                        ],
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red, fontSize: 14),
                       ),
-                    ),
-                  )
-                : SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_stats != null) ...[
-                            _buildStatsCard(),
-                            const SizedBox(height: 20),
-                          ],
-                          // Blood Donation Section
-                          _buildSectionHeader('BLOOD DONATION'),
-                          const SizedBox(height: 12),
-                          _buildDonationOption(
-                            context,
-                            icon: Icons.home,
-                            title: 'Home Donation',
-                            subtitle: 'Donate from the comfort of your home',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const BloodDonationHomePage(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          _buildDonationOption(
-                            context,
-                            icon: Icons.local_hospital,
-                            title: 'Hospital Donation',
-                            subtitle: 'Visit donation centers',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const BloodDonationHospitalPage(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 24),
-                          // Organ Donation Section
-                          _buildSectionHeader('ORGAN DONATION'),
-                          const SizedBox(height: 12),
-                          _buildDonationOption(
-                            context,
-                            icon: Icons.favorite,
-                            title: 'Living Donor',
-                            subtitle: 'Living organ donation registration',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const AliveOrganDonationPage(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          _buildDonationOption(
-                            context,
-                            icon: Icons.health_and_safety,
-                            title: 'After Death',
-                            subtitle: 'Posthumous organ donation pledge',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const AfterDeathDonationPage(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 24),
-                          // Financial Support Section
-                          _buildSectionHeader('FINANCIAL SUPPORT'),
-                          const SizedBox(height: 12),
-                          _buildDonationOption(
-                            context,
-                            icon: Icons.attach_money,
-                            title: 'Surgical Donation',
-                            subtitle: 'Support surgical procedures',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const FinancialSupportPage(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 20),
-                        ],
+                      const SizedBox(height: 16),
+                      TextButton.icon(
+                        onPressed: _loadData,
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('Retry'),
                       ),
-                    ),
+                    ],
                   ),
+                ),
+              )
+            : SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_stats != null) ...[
+                        _buildStatsCard(),
+                        const SizedBox(height: 20),
+                      ],
+                      // Blood Donation Section
+                      _buildSectionHeader('BLOOD DONATION'),
+                      const SizedBox(height: 12),
+                      _buildDonationOption(
+                        context,
+                        icon: Icons.home,
+                        title: 'Home Donation',
+                        subtitle: 'Donate from the comfort of your home',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const BloodDonationHomePage(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _buildDonationOption(
+                        context,
+                        icon: Icons.local_hospital,
+                        title: 'Hospital Donation',
+                        subtitle: 'Visit donation centers',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const BloodDonationHospitalPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      // Organ Donation Section
+                      _buildSectionHeader('ORGAN DONATION'),
+                      const SizedBox(height: 12),
+                      _buildDonationOption(
+                        context,
+                        icon: Icons.favorite,
+                        title: 'Living Donor',
+                        subtitle: 'Living organ donation registration',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AliveOrganDonationPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _buildDonationOption(
+                        context,
+                        icon: Icons.health_and_safety,
+                        title: 'After Death',
+                        subtitle: 'Posthumous organ donation pledge',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AfterDeathDonationPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      // Financial Support Section
+                      _buildSectionHeader('FINANCIAL SUPPORT'),
+                      const SizedBox(height: 12),
+                      _buildDonationOption(
+                        context,
+                        icon: Icons.attach_money,
+                        title: 'Surgical Donation',
+                        subtitle: 'Support surgical procedures',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const FinancialSupportPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
       ),
     );
   }
@@ -213,73 +210,7 @@ class _DonationCenterPageState extends State<DonationCenterPage> {
     if (metrics is! Map) return const SizedBox.shrink();
     final blood = metrics['blood_donations_per_year'];
     final organ = metrics['organ_transplants_per_year'];
-    final year = _stats!['year'];
-    String bloodStr = '—';
-    if (blood is int) {
-      if (blood >= 1000000) {
-        bloodStr = '${(blood / 1000000).toStringAsFixed(1)}M+';
-      } else if (blood >= 1000) {
-        bloodStr = '${(blood / 1000).toStringAsFixed(0)}K+';
-      } else {
-        bloodStr = '$blood';
-      }
-    }
-    String organStr = '—';
-    if (organ is int) {
-      if (organ >= 1000000) {
-        organStr = '${(organ / 1000000).toStringAsFixed(1)}M+';
-      } else if (organ >= 1000) {
-        organStr = '${(organ / 1000).toStringAsFixed(0)}K+';
-      } else {
-        organStr = '$organ';
-      }
-    }
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2F72FF).withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF2F72FF).withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Impact at a glance',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
-            ),
-          ),
-          if (year != null && year.toString().isNotEmpty)
-            Text(
-              'Worldwide estimates ($year)',
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-            ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatChip(
-                  Icons.bloodtype,
-                  'Blood donations/year',
-                  bloodStr,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildStatChip(
-                  Icons.health_and_safety,
-                  'Organ transplants/year',
-                  organStr,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildStatChip(IconData icon, String label, String value) {
@@ -303,15 +234,9 @@ class _DonationCenterPageState extends State<DonationCenterPage> {
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
-          Text(
-            label,
-            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-          ),
+          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
         ],
       ),
     );

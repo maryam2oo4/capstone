@@ -1,9 +1,11 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 
 import '../core/network/organ_donation_service.dart';
 import '../core/network/public_service.dart';
+import 'package:image_picker/image_picker.dart';
+import '../core/network/settings_service.dart';
+
 
 class AfterDeathDonationPage extends StatefulWidget {
   const AfterDeathDonationPage({super.key});
@@ -16,6 +18,10 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
   int _currentStep = 0;
   bool _isSubmitting = false;
   String? _errorMessage;
+
+  XFile? _idImage;
+  String _idFileName = 'No file chosen';
+  final ImagePicker _picker = ImagePicker();
 
   // Step 1 form fields
   final TextEditingController _firstNameController = TextEditingController();
@@ -36,8 +42,29 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
   @override
   void initState() {
     super.initState();
-    // Don't add listeners to prevent rapid state changes
     _loadHospitals();
+    _prefillFromRegistration();
+  }
+
+  Future<void> _prefillFromRegistration() async {
+    try {
+      final data = await SettingsService.getAllSettings();
+      final user = data['profile']?['user'] ?? {};
+      final donor = data['profile']?['donor'] ?? {};
+      _firstNameController.text = user['first_name'] ?? '';
+      _middleNameController.text = user['middle_name'] ?? '';
+      _lastNameController.text = user['last_name'] ?? '';
+      _emailController.text = user['email'] ?? '';
+      _phoneController.text = user['phone_nb'] ?? '';
+      _addressController.text = user['address'] ?? donor['address'] ?? '';
+      if (donor['date_of_birth'] != null) {
+        _dobController.text = donor['date_of_birth'];
+      }
+      setState(() {});
+    } catch (e) {
+      // ignore: avoid_print
+      print('Failed to prefill registration info: $e');
+    }
   }
 
   Future<void> _loadHospitals() async {
@@ -1191,7 +1218,7 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                             const SizedBox(height: 8),
                             DropdownButtonFormField<String>(
                               value: _gender,
-                              items: ['Male', 'Female', 'Other']
+                              items: ['Male', 'Female']
                                   .map(
                                     (e) => DropdownMenuItem(
                                       value: e,
@@ -1983,47 +2010,38 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      _idPhotoPath != null
-                                          ? _idPhotoPath!.split(RegExp(r'[/\\]')).last
-                                          : 'No file chosen',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: () async {
-                                      final result = await FilePicker.platform.pickFiles(
-                                        type: FileType.image,
-                                        allowMultiple: false,
-                                      );
-                                      if (result != null &&
-                                          result.files.isNotEmpty &&
-                                          result.files.single.path != null) {
-                                        setState(() =>
-                                            _idPhotoPath = result.files.single.path);
-                                      }
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Color(0xFF2563EB),
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 20,
-                                        vertical: 10,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      'Browse File',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
+    _idFileName,
+    style: TextStyle(
+      fontSize: 12,
+      color: Colors.grey.shade600,
+    ),
+  ),
+),
+ElevatedButton(
+  onPressed: () async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() {
+        _idImage = image;
+        _idFileName = image.name;
+      });
+    }
+  },
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Color(0xFF2563EB),
+    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(6),
+    ),
+  ),
+  child: Text(
+    'ID Image',
+    style: TextStyle(
+      color: Colors.white,
+      fontSize: 12,
+    ),
+  ),
+),
                                 ],
                               ),
                             ),
@@ -2054,47 +2072,38 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        _motherIdPhotoPath != null
-                                            ? _motherIdPhotoPath!.split(RegExp(r'[/\\]')).last
-                                            : 'No file chosen',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    ElevatedButton(
-                                      onPressed: () async {
-                                        final result = await FilePicker.platform.pickFiles(
-                                          type: FileType.image,
-                                          allowMultiple: false,
-                                        );
-                                        if (result != null &&
-                                            result.files.isNotEmpty &&
-                                            result.files.single.path != null) {
-                                          setState(() => _motherIdPhotoPath =
-                                              result.files.single.path);
-                                        }
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Color(0xFF2563EB),
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 20,
-                                          vertical: 10,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        'Browse File',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
+    _idFileName,
+    style: TextStyle(
+      fontSize: 12,
+      color: Colors.grey.shade600,
+    ),
+  ),
+),
+ElevatedButton(
+  onPressed: () async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() {
+        _idImage = image;
+        _idFileName = image.name;
+      });
+    }
+  },
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Color(0xFF2563EB),
+    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(6),
+    ),
+  ),
+  child: Text(
+    'ID Image',
+    style: TextStyle(
+      color: Colors.white,
+      fontSize: 12,
+    ),
+  ),
+),
                                   ],
                                 ),
                               ),
@@ -2123,47 +2132,38 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        _fatherIdPhotoPath != null
-                                            ? _fatherIdPhotoPath!.split(RegExp(r'[/\\]')).last
-                                            : 'No file chosen',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    ElevatedButton(
-                                      onPressed: () async {
-                                        final result = await FilePicker.platform.pickFiles(
-                                          type: FileType.image,
-                                          allowMultiple: false,
-                                        );
-                                        if (result != null &&
-                                            result.files.isNotEmpty &&
-                                            result.files.single.path != null) {
-                                          setState(() => _fatherIdPhotoPath =
-                                              result.files.single.path);
-                                        }
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Color(0xFF2563EB),
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 20,
-                                          vertical: 10,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        'Browse File',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
+    _idFileName,
+    style: TextStyle(
+      fontSize: 12,
+      color: Colors.grey.shade600,
+    ),
+  ),
+),
+ElevatedButton(
+  onPressed: () async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() {
+        _idImage = image;
+        _idFileName = image.name;
+      });
+    }
+  },
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Color(0xFF2563EB),
+    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(6),
+    ),
+  ),
+  child: Text(
+    'ID Image',
+    style: TextStyle(
+      color: Colors.white,
+      fontSize: 12,
+    ),
+  ),
+),
                                   ],
                                 ),
                               ),
@@ -2251,7 +2251,7 @@ class _AfterDeathDonationPageState extends State<AfterDeathDonationPage> {
                                   ),
                                 ),
                                 child: Text(
-                                  'Next Step',
+                                  'Next',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 14,

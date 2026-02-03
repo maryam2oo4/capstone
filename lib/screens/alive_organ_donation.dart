@@ -3,6 +3,8 @@ import 'package:dio/dio.dart';
 
 import '../core/network/organ_donation_service.dart';
 import '../core/network/public_service.dart';
+import 'package:image_picker/image_picker.dart';
+import '../core/network/settings_service.dart';
 
 class AliveOrganDonationPage extends StatefulWidget {
   const AliveOrganDonationPage({super.key});
@@ -37,6 +39,10 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
   bool _isCurrentSmoker = false;
   DateTime? _dateOfBirth;
 
+  XFile? _idImage;
+  String _idFileName = 'No file chosen';
+  final ImagePicker _picker = ImagePicker();
+
   // Recipient information state
   final TextEditingController _recipientNameController =
       TextEditingController();
@@ -49,7 +55,7 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
 
   // Non-directed hospital selection state
   String? _selectedNonDirectedHospital;
-  
+
   // Dynamic hospital data (names for UI; full list for resolving hospital_id)
   List<String> _hospitals = [];
   List<Map<String, dynamic>> _hospitalList = [];
@@ -60,6 +66,30 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
   void initState() {
     super.initState();
     _loadHospitals();
+    _prefillFromRegistration();
+  }
+
+  Future<void> _prefillFromRegistration() async {
+    try {
+      final data = await SettingsService.getAllSettings();
+      final user = data['profile']?['user'] ?? {};
+      final donor = data['profile']?['donor'] ?? {};
+      _firstNameController.text = user['first_name'] ?? '';
+      _middleNameController.text = user['middle_name'] ?? '';
+      _lastNameController.text = user['last_name'] ?? '';
+      _emailController.text = user['email'] ?? '';
+      _phoneController.text = user['phone_nb'] ?? '';
+      _addressController.text = user['address'] ?? donor['address'] ?? '';
+      if (donor['date_of_birth'] != null) {
+        try {
+          _dateOfBirth = DateTime.parse(donor['date_of_birth']);
+        } catch (_) {}
+      }
+      setState(() {});
+    } catch (e) {
+      // ignore: avoid_print
+      print('Failed to prefill registration info: $e');
+    }
   }
 
   Future<void> _loadHospitals() async {
@@ -82,7 +112,10 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
         raw = <dynamic>[];
       }
       final list = raw
-          .map((e) => e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{})
+          .map(
+            (e) =>
+                e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{},
+          )
           .where((m) => (m['name'] ?? m['id']) != null)
           .toList();
       if (!mounted) return;
@@ -112,10 +145,14 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
   static String? _organToSlug(String? organ) {
     if (organ == null) return null;
     switch (organ) {
-      case 'Kidney': return 'kidney';
-      case 'Liver': return 'liver-partial';
-      case 'Bone Marrow': return 'bone-marrow';
-      default: return null;
+      case 'Kidney':
+        return 'kidney';
+      case 'Liver':
+        return 'liver-partial';
+      case 'Bone Marrow':
+        return 'bone-marrow';
+      default:
+        return null;
     }
   }
 
@@ -224,7 +261,9 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
         );
         return;
       }
-      final organSlug = _organToSlug(formData['healthInfo']['organToDonate'] as String?);
+      final organSlug = _organToSlug(
+        formData['healthInfo']['organToDonate'] as String?,
+      );
       if (organSlug == null) {
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -238,48 +277,71 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
       if (_gender == null || (_gender != 'Male' && _gender != 'Female')) {
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select Gender.'), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text('Please select Gender.'),
+            backgroundColor: Colors.red,
+          ),
         );
         return;
       }
       if (_selectedBloodType == null || _selectedBloodType!.isEmpty) {
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select your Blood Type.'), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text('Please select your Blood Type.'),
+            backgroundColor: Colors.red,
+          ),
         );
         return;
       }
       if (_selectedDonationType == null || _selectedDonationType!.isEmpty) {
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select Donation Type (Directed or Non-Directed).'), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text(
+              'Please select Donation Type (Directed or Non-Directed).',
+            ),
+            backgroundColor: Colors.red,
+          ),
         );
         return;
       }
 
       final donationData = <String, dynamic>{
-        'first_name': (formData['personalInfo']['firstName'] as String?)?.trim() ?? '',
-        'middle_name': (formData['personalInfo']['middleName'] as String?)?.trim(),
-        'last_name': (formData['personalInfo']['lastName'] as String?)?.trim() ?? '',
+        'first_name':
+            (formData['personalInfo']['firstName'] as String?)?.trim() ?? '',
+        'middle_name': (formData['personalInfo']['middleName'] as String?)
+            ?.trim(),
+        'last_name':
+            (formData['personalInfo']['lastName'] as String?)?.trim() ?? '',
         'email': (formData['personalInfo']['email'] as String?)?.trim() ?? '',
         'phone': (formData['personalInfo']['phone'] as String?)?.trim() ?? '',
         'birth_date': birthDate,
         'gender': _gender!.toLowerCase(),
-        'address': (formData['personalInfo']['address'] as String?)?.trim() ?? '',
+        'address':
+            (formData['personalInfo']['address'] as String?)?.trim() ?? '',
         'blood_type': _selectedBloodType!,
         'organ': organSlug,
-        'donation_type': _selectedDonationType! == 'directed' ? 'directed' : 'non-directed',
+        'donation_type': _selectedDonationType! == 'directed'
+            ? 'directed'
+            : 'non-directed',
         'medical_conditions': formData['healthInfo']['healthConditions'],
         'agree_interest': _agreeToTerms,
       };
 
-      if (donationData['donation_type'] == 'directed' && formData['recipientInfo'] != null) {
+      if (donationData['donation_type'] == 'directed' &&
+          formData['recipientInfo'] != null) {
         final rec = formData['recipientInfo'] as Map<String, dynamic>;
         final hospitalId = _hospitalNameToId(rec['hospital'] as String?);
         if (hospitalId == null) {
           setState(() => _isSubmitting = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please select a valid hospital for the recipient.'), backgroundColor: Colors.red),
+            const SnackBar(
+              content: Text(
+                'Please select a valid hospital for the recipient.',
+              ),
+              backgroundColor: Colors.red,
+            ),
           );
           return;
         }
@@ -288,7 +350,10 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
         if (age == null || age < 1 || age > 120) {
           setState(() => _isSubmitting = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please enter a valid recipient age (1–120).'), backgroundColor: Colors.red),
+            const SnackBar(
+              content: Text('Please enter a valid recipient age (1–120).'),
+              backgroundColor: Colors.red,
+            ),
           );
           return;
         }
@@ -296,7 +361,10 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
         if (fullName.isEmpty) {
           setState(() => _isSubmitting = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please enter recipient full name.'), backgroundColor: Colors.red),
+            const SnackBar(
+              content: Text('Please enter recipient full name.'),
+              backgroundColor: Colors.red,
+            ),
           );
           return;
         }
@@ -304,7 +372,10 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
         if (contact.isEmpty) {
           setState(() => _isSubmitting = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please enter recipient contact (phone or email).'), backgroundColor: Colors.red),
+            const SnackBar(
+              content: Text('Please enter recipient contact (phone or email).'),
+              backgroundColor: Colors.red,
+            ),
           );
           return;
         }
@@ -312,7 +383,10 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
         if (recipientBlood == null || recipientBlood.isEmpty) {
           setState(() => _isSubmitting = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please select recipient blood type.'), backgroundColor: Colors.red),
+            const SnackBar(
+              content: Text('Please select recipient blood type.'),
+              backgroundColor: Colors.red,
+            ),
           );
           return;
         }
@@ -325,7 +399,8 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
           'hospital_id': hospitalId,
         };
       } else if (donationData['donation_type'] == 'non-directed') {
-        final sel = formData['hospitalSelection']?['selectedHospital'] as String?;
+        final sel =
+            formData['hospitalSelection']?['selectedHospital'] as String?;
         final hospitalId = _hospitalNameToId(sel);
         if (hospitalId != null) {
           donationData['hospital_selection'] = 'specific';
@@ -363,10 +438,14 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
           e.type == DioExceptionType.sendTimeout) {
-        msg = 'Request timed out. Your registration may have been saved. Please check your email or contact support to confirm.';
+        msg =
+            'Request timed out. Your registration may have been saved. Please check your email or contact support to confirm.';
       } else {
         final raw = e.response?.data is Map
-            ? (e.response!.data['message'] ?? e.response!.data['error'] ?? e.response!.data['errors']?.toString() ?? e.message)
+            ? (e.response!.data['message'] ??
+                  e.response!.data['error'] ??
+                  e.response!.data['errors']?.toString() ??
+                  e.message)
             : e.message;
         msg = raw?.toString() ?? 'Failed to submit registration.';
       }
@@ -524,14 +603,13 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                   const SizedBox(height: 20),
                   // Organ donation cards
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Kidney Card
-                      SizedBox(
-                        width: 95,
-                        height: 190,
+                      Expanded(
                         child: Container(
+                          height: 190,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: Colors.white,
@@ -578,10 +656,9 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                       ),
                       const SizedBox(width: 8),
                       // Liver Card
-                      SizedBox(
-                        width: 95,
-                        height: 190,
+                      Expanded(
                         child: Container(
+                          height: 190,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: Colors.white,
@@ -628,10 +705,9 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                       ),
                       const SizedBox(width: 8),
                       // Bone Marrow Card
-                      SizedBox(
-                        width: 95,
-                        height: 190,
+                      Expanded(
                         child: Container(
+                          height: 190,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: Colors.white,
@@ -675,65 +751,6 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                             ],
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Statistics
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // Statistics 1
-                      Column(
-                        children: [
-                          const Text(
-                            '17',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFF01010),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const SizedBox(
-                            width: 100,
-                            child: Text(
-                              'People die daily waiting for organs',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Statistics 2
-                      Column(
-                        children: [
-                          const Text(
-                            '100000+',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFF01010),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const SizedBox(
-                            width: 100,
-                            child: Text(
-                              'People on transplant waiting list',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
@@ -1179,15 +1196,67 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                       ),
                                     ),
                                     const SizedBox(height: 8),
-                                    ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.grey.shade200,
-                                        foregroundColor: Colors.black87,
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(6),
                                       ),
-                                      onPressed: () {
-                                        // Image picker logic
-                                      },
-                                      child: const Text('Choose File'),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          // Add a little space before file name
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              _idFileName,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          ElevatedButton(
+                                            onPressed: () async {
+                                              final XFile? image = await _picker
+                                                  .pickImage(
+                                                    source: ImageSource.gallery,
+                                                  );
+                                              if (image != null) {
+                                                setState(() {
+                                                  _idImage = image;
+                                                  _idFileName = image.name;
+                                                });
+                                              }
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(
+                                                0xFF2563EB,
+                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 18,
+                                                    vertical: 10,
+                                                  ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                              ),
+                                            ),
+                                            child: const Text(
+                                              'ID Image',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                      ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
@@ -1625,22 +1694,44 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                     decoration: BoxDecoration(
                                       color: Colors.amber.shade50,
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: Colors.amber.shade200),
+                                      border: Border.all(
+                                        color: Colors.amber.shade200,
+                                      ),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'Could not load hospitals. Please check your connection.',
-                                          style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.amber.shade900,
+                                          ),
                                         ),
                                         const SizedBox(height: 8),
                                         TextButton.icon(
-                                          onPressed: _isLoadingHospitals ? null : _loadHospitals,
+                                          onPressed: _isLoadingHospitals
+                                              ? null
+                                              : _loadHospitals,
                                           icon: _isLoadingHospitals
-                                              ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                                              : const Icon(Icons.refresh, size: 16),
-                                          label: Text(_isLoadingHospitals ? 'Loading...' : 'Retry'),
+                                              ? SizedBox(
+                                                  width: 14,
+                                                  height: 14,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                )
+                                              : const Icon(
+                                                  Icons.refresh,
+                                                  size: 16,
+                                                ),
+                                          label: Text(
+                                            _isLoadingHospitals
+                                                ? 'Loading...'
+                                                : 'Retry',
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -1657,10 +1748,11 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(4),
                                       ),
-                                      contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 10,
-                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 10,
+                                          ),
                                     ),
                                     style: const TextStyle(
                                       fontSize: 13,
@@ -1669,20 +1761,26 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                     items: _isLoadingHospitals
                                         ? []
                                         : _hospitals.isEmpty
-                                            ? [
-                                                DropdownMenuItem(
-                                                  value: null,
-                                                  child: Text('No hospitals available'),
-                                                  enabled: false,
-                                                ),
-                                              ]
-                                            : _hospitals.map(
+                                        ? [
+                                            DropdownMenuItem(
+                                              value: null,
+                                              child: Text(
+                                                'No hospitals available',
+                                              ),
+                                              enabled: false,
+                                            ),
+                                          ]
+                                        : _hospitals
+                                              .map(
                                                 (hospital) => DropdownMenuItem(
                                                   value: hospital,
                                                   child: Text(hospital),
                                                 ),
-                                              ).toList(),
-                                    onChanged: _isLoadingHospitals || _hospitals.isEmpty
+                                              )
+                                              .toList(),
+                                    onChanged:
+                                        _isLoadingHospitals ||
+                                            _hospitals.isEmpty
                                         ? null
                                         : (value) {
                                             setState(() {
@@ -1690,7 +1788,9 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                             });
                                           },
                                     hint: Text(
-                                      _isLoadingHospitals ? 'Loading hospitals...' : 'Select Hospital',
+                                      _isLoadingHospitals
+                                          ? 'Loading hospitals...'
+                                          : 'Select Hospital',
                                       style: TextStyle(fontSize: 13),
                                     ),
                                   ),
@@ -1723,22 +1823,44 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                     decoration: BoxDecoration(
                                       color: Colors.amber.shade50,
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: Colors.amber.shade200),
+                                      border: Border.all(
+                                        color: Colors.amber.shade200,
+                                      ),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'Could not load hospitals. Please check your connection.',
-                                          style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.amber.shade900,
+                                          ),
                                         ),
                                         const SizedBox(height: 8),
                                         TextButton.icon(
-                                          onPressed: _isLoadingHospitals ? null : _loadHospitals,
+                                          onPressed: _isLoadingHospitals
+                                              ? null
+                                              : _loadHospitals,
                                           icon: _isLoadingHospitals
-                                              ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                                              : const Icon(Icons.refresh, size: 16),
-                                          label: Text(_isLoadingHospitals ? 'Loading...' : 'Retry'),
+                                              ? SizedBox(
+                                                  width: 14,
+                                                  height: 14,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                )
+                                              : const Icon(
+                                                  Icons.refresh,
+                                                  size: 16,
+                                                ),
+                                          label: Text(
+                                            _isLoadingHospitals
+                                                ? 'Loading...'
+                                                : 'Retry',
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -1755,10 +1877,11 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(4),
                                       ),
-                                      contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 10,
-                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 10,
+                                          ),
                                     ),
                                     style: const TextStyle(
                                       fontSize: 13,
@@ -1767,28 +1890,37 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                     items: _isLoadingHospitals
                                         ? []
                                         : _hospitals.isEmpty
-                                            ? [
-                                                DropdownMenuItem(
-                                                  value: null,
-                                                  child: Text('No hospitals available'),
-                                                  enabled: false,
-                                                ),
-                                              ]
-                                            : _hospitals.map(
+                                        ? [
+                                            DropdownMenuItem(
+                                              value: null,
+                                              child: Text(
+                                                'No hospitals available',
+                                              ),
+                                              enabled: false,
+                                            ),
+                                          ]
+                                        : _hospitals
+                                              .map(
                                                 (hospital) => DropdownMenuItem(
                                                   value: hospital,
                                                   child: Text(hospital),
                                                 ),
-                                              ).toList(),
-                                    onChanged: _isLoadingHospitals || _hospitals.isEmpty
+                                              )
+                                              .toList(),
+                                    onChanged:
+                                        _isLoadingHospitals ||
+                                            _hospitals.isEmpty
                                         ? null
                                         : (value) {
                                             setState(() {
-                                              _selectedNonDirectedHospital = value;
+                                              _selectedNonDirectedHospital =
+                                                  value;
                                             });
                                           },
                                     hint: Text(
-                                      _isLoadingHospitals ? 'Loading hospitals...' : 'Select Hospital',
+                                      _isLoadingHospitals
+                                          ? 'Loading hospitals...'
+                                          : 'Select Hospital',
                                       style: TextStyle(fontSize: 13),
                                     ),
                                   ),
@@ -1844,7 +1976,9 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                             decoration: BoxDecoration(
                               color: const Color(0xFFFEE2E2),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFFECACA)),
+                              border: Border.all(
+                                color: const Color(0xFFFECACA),
+                              ),
                             ),
                             child: Text(
                               _errorMessage!,
@@ -1879,19 +2013,25 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                 borderRadius: BorderRadius.circular(6),
                               ),
                             ),
-                            onPressed: _isSubmitting ? null : () async {
-                              if (_formKey.currentState!.validate() &&
-                                  _agreeToTerms) {
-                                // Submit registration
-                                await _submitRegistration();
-                              } else if (!_agreeToTerms) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Please agree to the terms'),
-                                  ),
-                                );
-                              }
-                            },
+                            onPressed: _isSubmitting
+                                ? null
+                                : () async {
+                                    if (_formKey.currentState!.validate() &&
+                                        _agreeToTerms) {
+                                      // Submit registration
+                                      await _submitRegistration();
+                                    } else if (!_agreeToTerms) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Please agree to the terms',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -1901,13 +2041,17 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                     height: 16,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                 ],
                                 Text(
-                                  _isSubmitting ? 'Submitting...' : 'Send Request',
+                                  _isSubmitting
+                                      ? 'Submitting...'
+                                      : 'Send Request',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
@@ -1916,7 +2060,11 @@ class _AliveOrganDonationPageState extends State<AliveOrganDonationPage> {
                                 ),
                                 if (!_isSubmitting) ...[
                                   const SizedBox(width: 6),
-                                  const Icon(Icons.send, size: 16, color: Colors.white),
+                                  const Icon(
+                                    Icons.send,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
                                 ],
                               ],
                             ),
